@@ -78,25 +78,25 @@ man do I love to just install a random 500 dl extension...
 but chat still only supports ollama api instead of openai or rather it supports openai api now too but you cant add a model with that yet in the ui????  
 and llama-server only does openai api and not ollama api
 
-# LLM Profiling Data
+# Token Prefill and Decode Speeds
 
-As a test I asked the models to "review this script" with CreateAV3ToggleMenu.cs attached.  
-It's 8.8k tokens for qwen and 10.6k for gemma.  
-Qwen output was 5.5k to 7k tokens and gemma 2k tokens.
+As a test I asked the models to "review this script" with CreateAV3ToggleMenu.cs attached. All data points are a single run each.  
+Input token count is 8.8k for Qwen3.6 and 10.6k for Gemma4.  
+Output token count is 5.5k to 7k for Qwen3.6 and 2k for Gemma4.  
 
-| Model | Backend | Prefill Speed | Decode Speed |
-| :--- | :--- | ---: | ---: |
-| **Qwen3.6-27B-Q4** | Vulkan | 1,186 t/s | 35.9 t/s |
-| | CUDA | 1,982 t/s | 37.1 t/s |
-| **Qwen3.6-27B-Q3-MTP** | CUDA | 1,774 t/s | 59.7 t/s |
-| **Qwen3.6-35B-A3B-Q3** | Vulkan | 3,189 t/s | 102.0 t/s |
-| | CUDA | 3,946 t/s | 113.0 t/s |
-| **Qwen3.6-35B-A3B-Q3-MTP** | CUDA | 3,710 t/s | 135.0 t/s |
-| **Gemma4-31B-Q3** | Vulkan | 877 t/s | 27.9 t/s |
-| | CUDA | 1,409 t/s | 33.8 t/s |
-| **Gemma4-26B-A4B-Q4** | CUDA | 5,500 t/s | 90.0 t/s |
+| Model | Backend | Version | Prefill Speed | Decode Speed |
+| :--- | :--- | :---| ---: | ---: |
+| **Qwen3.6-27B-Q4** | Vulkan | | 1,186 t/s | 35.9 t/s |
+| | CUDA | b9209 | 1,982 t/s | 37.1 t/s |
+| **Qwen3.6-27B-Q3-MTP** | CUDA | b9209 | 1,774 t/s | 59.7 t/s |
+| **Qwen3.6-35B-A3B-Q3** | Vulkan | | 3,189 t/s | 102.0 t/s |
+| | CUDA | b9209 | 3,946 t/s | 113.0 t/s |
+| **Qwen3.6-35B-A3B-Q3-MTP** | CUDA | b9209 | 3,710 t/s | 135.0 t/s |
+| **Gemma4-31B-Q3** | Vulkan | | 877 t/s | 27.9 t/s |
+| | CUDA | b9209 | 1,409 t/s | 33.8 t/s |
+| **Gemma4-26B-A4B-Q4** | CUDA | b9209 | 5,500 t/s | 90.0 t/s |
 
-### CUDA Performance Uplift over Vulkan
+### CUDA Performance Delta over Vulkan
 
 | Model | Prefill | Decode |
 | :--- | :---: | :---: |
@@ -104,7 +104,7 @@ Qwen output was 5.5k to 7k tokens and gemma 2k tokens.
 | **Qwen3.6-35B-A3B-Q3** | +23.7% | +10.8% |
 | **Gemma4-31B-Q3** | +60.7% | +21.2% |
 
-### MTP (Multi-Token Prediction) Performance Delta
+### MTP Performance Delta with Version b9209 CUDA
 
 | Model | Prefill | Decode |
 | :--- | :---: | :---: |
