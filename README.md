@@ -78,6 +78,13 @@ man do I love to just install a random 500 dl extension...
 but chat still only supports ollama api instead of openai or rather it supports openai api now too but you cant add a model with that yet in the ui????  
 and llama-server only does openai api and not ollama api
 
+# MTP (Multi-Token Prediction) adventures
+
+First MTP tests with version b9209 CUDA 12.4
+works fine except for crash when dense model gets woken up from sleep again. updated to b9253 and it doesn't crash anymore on wake up.
+
+MTP does eat some vram (so less context budget) but especially for the 27B model the speedup is very significant. 35B moe has less speedup but also a bit more vram overhead so its just a bit better for basically no tradeoff.
+
 # Token Prefill and Decode Speeds
 
 As a test I asked the models to "review this script" with CreateAV3ToggleMenu.cs attached. All data points are a single run each.  
@@ -88,13 +95,19 @@ Output token count is 5.5k to 7k for Qwen3.6 and 2k for Gemma4.
 | :--- | :--- | :---| ---: | ---: |
 | **Qwen3.6-27B-Q4** | Vulkan | | 1,186 t/s | 35.9 t/s |
 | | CUDA | b9209 | 1,982 t/s | 37.1 t/s |
+| | CUDA | b9253 | 2,146 t/s | 37.0 t/s |
 | **Qwen3.6-27B-Q3-MTP** | CUDA | b9209 | 1,774 t/s | 59.7 t/s |
+| | CUDA | b9253 | 1,778 t/s | 59.5 t/s |
 | **Qwen3.6-35B-A3B-Q3** | Vulkan | | 3,189 t/s | 102.0 t/s |
 | | CUDA | b9209 | 3,946 t/s | 113.0 t/s |
+| | CUDA | b9253 | 4,680 t/s | 113.6 t/s |
 | **Qwen3.6-35B-A3B-Q3-MTP** | CUDA | b9209 | 3,710 t/s | 135.0 t/s |
+| | CUDA | b9253 | 3,869 t/s | 131.7 t/s |
 | **Gemma4-31B-Q3** | Vulkan | | 877 t/s | 27.9 t/s |
 | | CUDA | b9209 | 1,409 t/s | 33.8 t/s |
+| | CUDA | b9253 | 1,450 t/s | 30.5 t/s |
 | **Gemma4-26B-A4B-Q4** | CUDA | b9209 | 5,500 t/s | 90.0 t/s |
+| | CUDA | b9253 | 5,329 t/s | 90.1 t/s |
 
 ### CUDA Performance Delta over Vulkan
 
