@@ -29,34 +29,32 @@ https://quanteval.ai/leaderboards.html
 ## models.ini file for coding
 ```ini
 [*]
-fa = on
-ctk = q8_0
-ctv = q8_0
+flash-attn = on ;needs to be on for kv quant to work
+cache-type-k = q8_0
+cache-type-v = q8_0
 jinja = true
-no-mmproj = true
+no-mmproj = true ;vision support eats around 1gb of vram so disable it for more context length instead
+temp = 0.6 ;qwen3.6 sampling params for coding
+top-p = 0.95
+top-k = 20
+min-p = 0.00
+n-gpu-layers = all
 
 [Qwen3.6-35B-A3B]
-c = 200000
+ctx-size = 200000
 hf = unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q3_K_M
-temp = 0.6
-top-p = 0.95
-top-k = 20
-min-p = 0.00
 
 [Qwen3.6-27B-Q4]
-c = 140000
+ctx-size = 140000
 hf = unsloth/Qwen3.6-27B-GGUF:Q4_K_S
-temp = 0.6
-top-p = 0.95
-top-k = 20
-min-p = 0.00
 
 [Gemma4-31B-Q3]
-c = 100000
+ctx-size = 100000
 hf = unsloth/gemma-4-31B-it-GGUF:Q3_K_M
 temp = 1.0
 top-p = 0.95
 top-k = 64
+min-p = 0.05
 ```
 
 run server with:  
