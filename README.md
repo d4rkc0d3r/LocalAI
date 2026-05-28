@@ -11,6 +11,7 @@ llama-cli -hf unsloth/gemma-4-31B-it-GGUF:Q3_K_M
 ```
 
 kv cache quantization reddit thread: https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/  
+even more kv cache tests: https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/  
 said k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed so I just go with 8_0 for v too
 
 slightly lower context window on dense since that eats way more vram with kv cache.
@@ -18,7 +19,12 @@ I personally use the qwen moe 35B since its more than twice the token generation
 
 3bit weights + 8bit kv cache leave quite a bit of slack in vram for desktop & browsers n stuff
 
-models.ini file for coding:
+## Model Quant Impact Resources
+qwen3.6 seems pretty resistant to even 3bit quants: https://kaitchup.substack.com/p/summary-of-qwen36-gguf-evals-updating
+
+https://quanteval.ai/leaderboards.html
+
+## models.ini file for coding
 ```ini
 [*]
 fa = on
