@@ -10,6 +10,8 @@ llama-cli -hf unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q3_K_M
 llama-cli -hf unsloth/gemma-4-31B-it-GGUF:Q3_K_M
 ```
 
+My hardware is a 4090 with 24GB of VRAM. This is my main gpu so it needs to run windows, unity & maybe a browser as well as the models. This means I have more like 20GB for the models to work with.
+
 kv cache quantization reddit thread: https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/  
 even more kv cache tests: https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/  
 said k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed so I just go with 8_0 for v too
@@ -60,7 +62,7 @@ top-k = 64
 run server with:  
 `llama-server --port 8000 --models-preset ".\models.ini" --timeout 600 --models-max 1 --sleep-idle-seconds 300`
 
-no-mmproj for no vision support saving *memory*
+no-mmproj for no vision support saving some vram
 
 can use normal chat interface in browser by going to:
 `127.0.0.1:8000`
@@ -82,7 +84,8 @@ it works well in agent mode then
 rant:  
 man do I love to just install a random 500 dl extension...  
 but chat still only supports ollama api instead of openai or rather it supports openai api now too but you cant add a model with that yet in the ui????  
-and llama-server only does openai api and not ollama api
+and llama-server only does openai api and not ollama api  
+I think there is a way now to add custom endpoints but I haven't figured out yet how to do it, so extension it is for now.
 
 # MTP (Multi-Token Prediction) adventures
 
