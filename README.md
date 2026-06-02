@@ -110,7 +110,7 @@ needs prerequisites:
 - cudart-llama-bin-win-cuda-12.4-x64.dll
   - download from any llama.cpp release like: https://github.com/ggml-org/llama.cpp/releases/download/b9479/cudart-llama-bin-win-cuda-12.4-x64.zip
 
-then just run `pull_from_github.bat` => `build.bat` => `copy_to_test.bat`  
+then just run `pull_from_github.bat` => `build.bat`  
 afterwards `bench_models.bat` to to check for any speed regressions before copying the files to the main `llama.cpp-CUDA` folder for regular use.
 
 # Token Prefill and Decode Speeds
