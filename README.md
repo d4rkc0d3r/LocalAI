@@ -14,7 +14,8 @@ My hardware is a 4090 with 24GB of VRAM. This is my main gpu so it needs to run 
 
 kv cache quantization reddit thread: https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/  
 even more kv cache tests: https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/  
-said k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed so I just go with 8_0 for v too
+said k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed so I just go with 8_0 for v too.
+turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for it to work at full speed.
 
 slightly lower context window on dense since that eats way more vram with kv cache.
 I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with simple hi message.
@@ -91,6 +92,26 @@ First MTP tests with version b9209 CUDA 12.4
 works fine except for crash when dense model gets woken up from sleep again. updated to b9253 and it doesn't crash anymore on wake up.
 
 MTP does eat some vram (so less context budget) but especially for the 27B model the speedup is very significant. 35B moe has less speedup but also a bit more vram overhead so its just a bit better for basically no tradeoff.
+
+# Building with CUDA 12.4
+needs prerequisites:
+- Git
+  - verify with `git --version`
+- CUDA 12.4 toolkit
+  - verify with `nvcc --version`
+- Visual Studio 2022 Build Tools with Desktop development with C++ workload
+  - verify with `cl` in `x64 Native Tools Command Prompt for VS 2022`
+  - you might need to adjust the path to `vcvars64.bat` in `build.bat`
+- [CMake](https://cmake.org/download/)
+  - verify with `cmake --version`
+- ninja build system
+  - `winget install Ninja-build.Ninja`
+  - verify with `ninja --version`
+- cudart-llama-bin-win-cuda-12.4-x64.dll
+  - download from any llama.cpp release like: https://github.com/ggml-org/llama.cpp/releases/download/b9479/cudart-llama-bin-win-cuda-12.4-x64.zip
+
+then just run `pull_from_github.bat` => `build.bat` => `copy_to_test.bat`  
+afterwards `bench_models.bat` to to check for any speed regressions before copying the files to the main `llama.cpp-CUDA` folder for regular use.
 
 # Token Prefill and Decode Speeds
 
