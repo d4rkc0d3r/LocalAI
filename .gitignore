@@ -2,4 +2,7 @@ Llama Server.lnk
 llama-cpp.ico
 llama-cpp.png
 llama.cpp-CUDA/*
+llama.cpp-latest/*
+llama.cpp-test/*
+cudart-llama-bin-win-cuda-12.4-x64/*
 bench_results/*
