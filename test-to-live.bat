@@ -1,0 +1,1 @@
+xcopy llama.cpp-test llama.cpp-CUDA /Y
