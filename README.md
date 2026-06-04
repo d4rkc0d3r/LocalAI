@@ -124,18 +124,24 @@ Output token count is 5.5k to 7k for Qwen3.6 and 2k for Gemma4.
 | **Qwen3.6-27B-Q4** | Vulkan | | 1,186 t/s | 35.9 t/s |
 | | CUDA | b9209 | 1,982 t/s | 37.1 t/s |
 | | CUDA | b9253 | 2,146 t/s | 37.0 t/s |
+| | CUDA | b9509 | 2,132 t/s | 37.8 t/s |
 | **Qwen3.6-27B-Q3-MTP** | CUDA | b9209 | 1,774 t/s | 59.7 t/s |
 | | CUDA | b9253 | 1,778 t/s | 59.5 t/s |
+| | CUDA | b9509 | 1,802 t/s | 62.5 t/s |
 | **Qwen3.6-35B-A3B-Q3** | Vulkan | | 3,189 t/s | 102.0 t/s |
 | | CUDA | b9209 | 3,946 t/s | 113.0 t/s |
 | | CUDA | b9253 | 4,680 t/s | 113.6 t/s |
+| | CUDA | b9509 | 4,461 t/s | 114.9 t/s |
 | **Qwen3.6-35B-A3B-Q3-MTP** | CUDA | b9209 | 3,710 t/s | 135.0 t/s |
 | | CUDA | b9253 | 3,869 t/s | 131.7 t/s |
+| | CUDA | b9509 | 4,069 t/s | 139.5 t/s |
 | **Gemma4-31B-Q3** | Vulkan | | 877 t/s | 27.9 t/s |
 | | CUDA | b9209 | 1,409 t/s | 33.8 t/s |
 | | CUDA | b9253 | 1,450 t/s | 30.5 t/s |
+| | CUDA | b9509 | 1,692 t/s | 32.0 t/s |
 | **Gemma4-26B-A4B-Q4** | CUDA | b9209 | 5,500 t/s | 90.0 t/s |
 | | CUDA | b9253 | 5,329 t/s | 90.1 t/s |
+| | CUDA | b9509 | 5,574 t/s | 91.2 t/s |
 
 ### CUDA Performance Delta over Vulkan
 
