@@ -12,15 +12,22 @@ llama-cli -hf unsloth/gemma-4-31B-it-GGUF:Q3_K_M
 
 My hardware is a 4090 with 24GB of VRAM. This is my main gpu so it needs to run windows, unity & maybe a browser as well as the models. This means I have more like 20GB for the models to work with.
 
-kv cache quantization reddit thread: https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/  
-even more kv cache tests: https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/  
-said k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed so I just go with 8_0 for v too.
-turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for it to work at full speed.
-
 slightly lower context window on dense since that eats way more vram with kv cache.
-I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with simple hi message.
+I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with simple hi message.  
+Because of MTP the dense is now usably fast so I switched to mostly use that one now.
 
 3bit weights + 8bit kv cache leave quite a bit of slack in vram for desktop & browsers n stuff
+
+## KV Cache Quant
+* https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
+* https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
+* https://www.reddit.com/r/LocalLLaMA/comments/1txlhxu/i_implemented_kvarn_in_my_llamacpp_fork_and_ran/
+
+resources show k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed ~~so I just go with 8_0 for v too~~.
+turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for it to work at full speed.
+
+dense qwen model might be more resistant to kv cache quant so its the only one I use 8_0/5_1 on. the others stay at 8_0/8_0 for now.
+I hope the kvarn gets something like 5_1/5_1 to a similar quality for some extra vram savings in the future.
 
 ## Model Quant Impact Resources
 qwen3.6 seems pretty resistant to even 3bit quants: https://kaitchup.substack.com/p/summary-of-qwen36-gguf-evals-updating
