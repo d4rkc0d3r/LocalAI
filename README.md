@@ -29,6 +29,8 @@ turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for 
 dense qwen model might be more resistant to kv cache quant so its the only one I use 8_0/5_1 on. the others stay at 8_0/8_0 for now.
 I hope the kvarn gets something like 5_1/5_1 to a similar quality for some extra vram savings in the future.
 
+don't quantize kv cache for MTP layers as there is VRAM overhead that doesn't get amortized like with the main model.
+
 ## Model Quant Impact Resources
 qwen3.6 seems pretty resistant to even 3bit quants: https://kaitchup.substack.com/p/summary-of-qwen36-gguf-evals-updating
 
