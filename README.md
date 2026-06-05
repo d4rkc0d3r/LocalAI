@@ -34,43 +34,10 @@ qwen3.6 seems pretty resistant to even 3bit quants: https://kaitchup.substack.co
 
 https://quanteval.ai/leaderboards.html
 
-## models.ini file for coding
-```ini
-[*]
-flash-attn = on ;needs to be on for kv quant to work
-cache-type-k = q8_0
-cache-type-v = q8_0
-jinja = true
-no-mmproj = true ;vision support eats around 1gb of vram so disable it for more context length instead
-temp = 0.6 ;qwen3.6 sampling params for coding
-top-p = 0.95
-top-k = 20
-min-p = 0.00
-n-gpu-layers = all
+# Using with llama-server
+check `LaunchServer.bat` and `models.ini` to see how to launch the server with the models you want.
 
-[Qwen3.6-35B-A3B]
-ctx-size = 200000
-hf = unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q3_K_M
-
-[Qwen3.6-27B-Q4]
-ctx-size = 140000
-hf = unsloth/Qwen3.6-27B-GGUF:Q4_K_S
-
-[Gemma4-31B-Q3]
-ctx-size = 100000
-hf = unsloth/gemma-4-31B-it-GGUF:Q3_K_M
-temp = 1.0
-top-p = 0.95
-top-k = 64
-min-p = 0.05
-```
-
-run server with:  
-`llama-server --port 8000 --models-preset ".\models.ini" --timeout 600 --models-max 1 --sleep-idle-seconds 300`
-
-no-mmproj for no vision support saving some vram
-
-can use normal chat interface in browser by going to:
+can use normal chat interface in browser WebUI by going to:
 `127.0.0.1:8000`
 
 or use in VSCode with extension "Copilot for llama-server LLMs"  
@@ -83,7 +50,7 @@ add to settings.json:
 }
 ```
 
-then in chat model picker click gear wheel "Manage Language Models" and now Llama Server should show up with both qwen and the gemma model
+then in chat model picker click gear wheel "Manage Language Models" and now Llama Server should show up with all models in the models.ini file.
 
 it works well in agent mode then
 
