@@ -69,6 +69,8 @@ works fine except for crash when dense model gets woken up from sleep again. upd
 
 MTP does eat some vram (so less context budget) but especially for the 27B model the speedup is very significant. 35B moe has less speedup but also a bit more vram overhead so its just a bit better for basically no tradeoff.
 
+spec-draft-n-max > 2 might increase speed even more on dense but it also eats more vram.
+
 # Building with CUDA 12.4
 needs prerequisites:
 - Git
