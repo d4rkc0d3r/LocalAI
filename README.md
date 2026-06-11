@@ -18,6 +18,10 @@ Because of MTP the dense is now usably fast so I switched to mostly use that one
 
 3bit weights + 8bit kv cache leave quite a bit of slack in vram for desktop & browsers n stuff
 
+--parallel 1 saves ~1gb of vram over the default 4 and I don't do parallel requests anyways  
+with that I looked at spec-draft-n-max > 2 for MTP again. 3 is slightly faster on the two test 64t/s -> 67t/s & 76t/s -> 85t/s, 4 slower by quite a lot.
+both tests are rather short context so maybe at larger context even 3 is too much but I'll go with 3 for now.
+
 ## KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
