@@ -1,3 +1,6 @@
+These are my personal notes on using llama.cpp for a local LLM setup on windows.  
+My hardware is a 4090 with 24GB of VRAM. This is my main gpu so it needs to run windows, unity & maybe a browser as well as the models. This means I have more like 20GB for the models to work with.
+
 easy install with vulkan backend on windows with
 ```
 winget install llama.cpp
@@ -9,8 +12,6 @@ llama-cli -hf unsloth/Qwen3.6-27B-GGUF:Q4_K_S
 llama-cli -hf unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q3_K_M
 llama-cli -hf unsloth/gemma-4-31B-it-GGUF:Q3_K_M
 ```
-
-My hardware is a 4090 with 24GB of VRAM. This is my main gpu so it needs to run windows, unity & maybe a browser as well as the models. This means I have more like 20GB for the models to work with.
 
 slightly lower context window on dense since that eats way more vram with kv cache.
 I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with simple hi message.  
