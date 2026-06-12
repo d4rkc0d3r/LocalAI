@@ -69,6 +69,11 @@ Because of MTP the dense is now usably fast so I switched to mostly use that one
 with that I looked at spec-draft-n-max > 2 for MTP again. 3 is slightly faster on the two test 64t/s -> 67t/s & 76t/s -> 85t/s, 4 slower by quite a lot.
 both tests are rather short context so maybe at larger context even 3 is too much but I'll go with 3 for now.
 
+gemma4 31b eats too much vram so I dont use it.  
+gemma4 26b is too unreliable for tool calls so I don't use it.  
+qwen3.6 35b is a bit loopy so I'd rather not use it, but much better than gemma moe for sure.  
+qwen3.6 27b is good and with MTP at a usable speed so I pretty much use just this one now.
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
