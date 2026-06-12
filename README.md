@@ -1,47 +1,35 @@
 These are my personal notes on using llama.cpp for a local LLM setup on windows.  
 My hardware is a 4090 with 24GB of VRAM. This is my main gpu so it needs to run windows, unity & maybe a browser as well as the models. This means I have more like 20GB for the models to work with.
 
+## Installation
 easy install with vulkan backend on windows with
 ```
 winget install llama.cpp
 ```
+However I recommend to build with CUDA instead. much better performance and the build flags enable to use any combination of kv quant without speed cratering.
 
-models get automatically dl'd from hugging face when used with llama-cli or llama-server. if you want to load them first just run these each to start a default interactive session with the models:
-```
-llama-cli -hf unsloth/Qwen3.6-27B-GGUF:Q4_K_S
-llama-cli -hf unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q3_K_M
-llama-cli -hf unsloth/gemma-4-31B-it-GGUF:Q3_K_M
-```
+### Building with CUDA 12.4
+needs prerequisites:
+- Git
+  - verify with `git --version`
+- CUDA 12.4 toolkit
+  - verify with `nvcc --version`
+- Visual Studio 2022 Build Tools with Desktop development with C++ workload
+  - verify with `cl` in `x64 Native Tools Command Prompt for VS 2022`
+  - you might need to adjust the path to `vcvars64.bat` in `build.bat`
+- [CMake](https://cmake.org/download/)
+  - verify with `cmake --version`
+- ninja build system
+  - `winget install Ninja-build.Ninja`
+  - verify with `ninja --version`
+- cudart-llama-bin-win-cuda-12.4-x64.dll
+  - download from any llama.cpp release like: https://github.com/ggml-org/llama.cpp/releases/download/b9479/cudart-llama-bin-win-cuda-12.4-x64.zip
 
-slightly lower context window on dense since that eats way more vram with kv cache.
-I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with simple hi message.  
-Because of MTP the dense is now usably fast so I switched to mostly use that one now.
+for first installation clone repo with `git clone https://github.com/ggml-org/llama.cpp.git llama.cpp-latest`  
+then just run `pull_from_github.bat` => `build.bat`  
+afterwards `bench_models.bat` to to check for any speed regressions before copying the files with `test-to-live.bat` to the main `llama.cpp-CUDA` folder for regular use.
 
-3bit weights + 8bit kv cache leave quite a bit of slack in vram for desktop & browsers n stuff
-
---parallel 1 saves ~1gb of vram over the default 4 and I don't do parallel requests anyways  
-with that I looked at spec-draft-n-max > 2 for MTP again. 3 is slightly faster on the two test 64t/s -> 67t/s & 76t/s -> 85t/s, 4 slower by quite a lot.
-both tests are rather short context so maybe at larger context even 3 is too much but I'll go with 3 for now.
-
-## KV Cache Quant
-* https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
-* https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
-* https://www.reddit.com/r/LocalLLaMA/comments/1txlhxu/i_implemented_kvarn_in_my_llamacpp_fork_and_ran/
-
-resources show k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed ~~so I just go with 8_0 for v too~~.
-turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for it to work at full speed.
-
-dense qwen model might be more resistant to kv cache quant so its the only one I use 8_0/5_1 on. the others stay at 8_0/8_0 for now.
-I hope the kvarn gets something like 5_1/5_1 to a similar quality for some extra vram savings in the future.
-
-don't quantize kv cache for MTP layers as there is VRAM overhead that doesn't get amortized like with the main model.
-
-## Model Quant Impact Resources
-qwen3.6 seems pretty resistant to even 3bit quants: https://kaitchup.substack.com/p/summary-of-qwen36-gguf-evals-updating
-
-https://quanteval.ai/leaderboards.html
-
-# Using with llama-server
+## Using with llama-server
 check `LaunchServer.bat` and `models.ini` to see how to launch the server with the models you want.
 
 can use normal chat interface in browser WebUI by going to:
@@ -67,7 +55,39 @@ but chat still only supports ollama api instead of openai or rather it supports 
 and llama-server only does openai api and not ollama api  
 I think there is a way now to add custom endpoints but I haven't figured out yet how to do it, so extension it is for now.
 
-# MTP (Multi-Token Prediction) adventures
+## Random Notes
+
+models get automatically dl'd from hugging face when used with llama-cli or llama-server.
+
+slightly lower context window on dense since that eats way more vram with kv cache.
+I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with simple hi message.  
+Because of MTP the dense is now usably fast so I switched to mostly use that one now.
+
+3bit weights + 8bit kv cache leave quite a bit of slack in vram for desktop & browsers n stuff
+
+--parallel 1 saves ~1gb of vram over the default 4 and I don't do parallel requests anyways  
+with that I looked at spec-draft-n-max > 2 for MTP again. 3 is slightly faster on the two test 64t/s -> 67t/s & 76t/s -> 85t/s, 4 slower by quite a lot.
+both tests are rather short context so maybe at larger context even 3 is too much but I'll go with 3 for now.
+
+### KV Cache Quant
+* https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
+* https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
+* https://www.reddit.com/r/LocalLLaMA/comments/1txlhxu/i_implemented_kvarn_in_my_llamacpp_fork_and_ran/
+
+resources show k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed ~~so I just go with 8_0 for v too~~.
+turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for it to work at full speed.
+
+dense qwen model might be more resistant to kv cache quant so its the only one I use 8_0/5_1 on. the others stay at 8_0/8_0 for now.
+I hope the kvarn gets something like 5_1/5_1 to a similar quality for some extra vram savings in the future.
+
+don't quantize kv cache for MTP layers as there is VRAM overhead that doesn't get amortized like with the main model.
+
+### Model Quant Impact Resources
+qwen3.6 seems pretty resistant to even 3bit quants: https://kaitchup.substack.com/p/summary-of-qwen36-gguf-evals-updating
+
+https://quanteval.ai/leaderboards.html
+
+## MTP (Multi-Token Prediction) adventures
 
 First MTP tests with version b9209 CUDA 12.4
 works fine except for crash when dense model gets woken up from sleep again. updated to b9253 and it doesn't crash anymore on wake up.
@@ -76,27 +96,7 @@ MTP does eat some vram (so less context budget) but especially for the 27B model
 
 spec-draft-n-max > 2 might increase speed even more on dense but it also eats more vram.
 
-# Building with CUDA 12.4
-needs prerequisites:
-- Git
-  - verify with `git --version`
-- CUDA 12.4 toolkit
-  - verify with `nvcc --version`
-- Visual Studio 2022 Build Tools with Desktop development with C++ workload
-  - verify with `cl` in `x64 Native Tools Command Prompt for VS 2022`
-  - you might need to adjust the path to `vcvars64.bat` in `build.bat`
-- [CMake](https://cmake.org/download/)
-  - verify with `cmake --version`
-- ninja build system
-  - `winget install Ninja-build.Ninja`
-  - verify with `ninja --version`
-- cudart-llama-bin-win-cuda-12.4-x64.dll
-  - download from any llama.cpp release like: https://github.com/ggml-org/llama.cpp/releases/download/b9479/cudart-llama-bin-win-cuda-12.4-x64.zip
-
-then just run `pull_from_github.bat` => `build.bat`  
-afterwards `bench_models.bat` to to check for any speed regressions before copying the files to the main `llama.cpp-CUDA` folder for regular use.
-
-# Token Prefill and Decode Speeds
+## Token Prefill and Decode Speeds
 
 As a test I asked the models to "review this script" with CreateAV3ToggleMenu.cs attached. All data points are a single run each.  
 Input token count is 8.8k for Qwen3.6 and 10.6k for Gemma4.  
