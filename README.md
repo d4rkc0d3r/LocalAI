@@ -120,6 +120,7 @@ Output token count is 5.5k to 7k for Qwen3.6 and 2k for Gemma4.
 | **Qwen3.6-27B-Q3-MTP** | CUDA | b9209 | 1,774 t/s | 59.7 t/s |
 | | CUDA | b9253 | 1,778 t/s | 59.5 t/s |
 | | CUDA | b9509 | 1,802 t/s | 62.5 t/s |
+| **Qwen3.6-27B-IQ4-pure-MTP** | CUDA | b9627 | 2,055 t/s | 82.5 t/s |
 | **Qwen3.6-35B-A3B-Q3** | Vulkan | | 3,189 t/s | 102.0 t/s |
 | | CUDA | b9209 | 3,946 t/s | 113.0 t/s |
 | | CUDA | b9253 | 4,680 t/s | 113.6 t/s |
