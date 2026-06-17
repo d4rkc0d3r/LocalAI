@@ -74,6 +74,10 @@ gemma4 26b is too unreliable for tool calls so I don't use it.
 qwen3.6 35b is a bit loopy so I'd rather not use it, but much better than gemma moe for sure.  
 qwen3.6 27b is good and with MTP at a usable speed so I pretty much use just this one now.
 
+trying the [IQ4-pure](https://huggingface.co/GianniDPC/Qwen3.6-27B-IQ4_XS-pure-with-MTP-GGUF) version instead of unsloth Q3_K_XL for 27B MTP since it seems to be basically same size for better mean kld:  
+https://www.reddit.com/r/LocalLLaMA/comments/1u7vdey/someone_awhile_ago_did_a_quant_shootout_for/os55ap9/  
+yup it's slightly smaller ~150mb and also runs significantly faster?? ~85t/s vs ~65t/s. I'll use this one for now.
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
