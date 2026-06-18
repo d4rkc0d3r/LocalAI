@@ -1,20 +1,7 @@
 llama.cpp-CUDA\llama-server.exe ^
   --port 8000 ^
+  --models-preset models.ini ^
   --timeout 600 ^
+  --models-max 1 ^
   --parallel 1 ^
-  --log-colors off ^
-  -hf "GianniDPC/Qwen3.6-27B-IQ4_XS-pure-with-MTP-GGUF:IQ4_XS" ^
-  --n-gpu-layers all ^
-  --n-gpu-layers-draft all ^
-  --flash-attn on ^
-  --cache-type-k q8_0 ^
-  --cache-type-v q5_1 ^
-  --ctx-size 110000 ^
-  --spec-type draft-mtp ^
-  --spec-draft-n-max 3 ^
-  --jinja ^
-  --no-mmproj ^
-  --temp 0.6 ^
-  --top-p 0.95 ^
-  --top-k 20 ^
-  --min-p 0.00
+  --log-colors off
