@@ -26,8 +26,8 @@ needs prerequisites:
   - download from any llama.cpp release like: https://github.com/ggml-org/llama.cpp/releases/download/b9479/cudart-llama-bin-win-cuda-12.4-x64.zip
 
 for first installation clone repo with `git clone https://github.com/ggml-org/llama.cpp.git llama.cpp-latest`  
-then just run `pull_from_github.bat` => `build.bat`  
-afterwards `bench_models.bat` to to check for any speed regressions before copying the files with `test-to-live.bat` to the main `llama.cpp-CUDA` folder for regular use.
+then just run `pull_from_github.bat` and then `build.bat`  
+afterwards `bench_models.bat` to check for any speed regressions before copying the files with `test-to-live.bat` to the main `llama.cpp-CUDA` folder for regular use.
 
 ## Using with llama-server
 check `LaunchServer.bat` and `models.ini` to see how to launch the server with the models you want.
@@ -56,11 +56,12 @@ and llama-server only does openai api and not ollama api
 I think there is a way now to add custom endpoints but I haven't figured out yet how to do it, so extension it is for now.
 
 ## Random Notes
+these are my notes in chronological order. don't assume early entries are still valid.
 
 models get automatically dl'd from hugging face when used with llama-cli or llama-server.
 
 slightly lower context window on dense since that eats way more vram with kv cache.
-I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with simple hi message.  
+I personally use the qwen moe 35B since its more than twice the token generation speed. ~110 tok/s vs ~43 tok/s with prompt "hi".  
 Because of MTP the dense is now usably fast so I switched to mostly use that one now.
 
 3bit weights + 8bit kv cache leave quite a bit of slack in vram for desktop & browsers n stuff
@@ -83,6 +84,10 @@ Use `reasoning-preserve = true` for qwen models as they were trained with it on.
 
 Switch 27B qwen to unsloth IQ4 version since I had a bit of extra VRAM and its bench numbers are better than the GianniDPC pure IQ4 version.
 I did have some trouble downloading it with the bench or server but ended up doing it with a `llama.cpp-test/llama-cli -hf unsloth/Qwen3.6-27B-MTP-GGUF:IQ4_XS -c 10000 -p hi` command.
+
+TODO: check out https://github.com/ggml-org/llama.cpp/pull/23869 for MTP benching
+
+Is there now a mmap for VRAM? I noticed that restarting the server doesn't need to load model from disk anymore if it was loaded before. (b9906)
 
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
