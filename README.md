@@ -79,6 +79,11 @@ yup it's slightly smaller ~150mb and also runs significantly faster?? ~85t/s vs 
 
 I added --no-mmap to the server args. with it enabled you can kill the server and launch it again and the model will load quickly again but on the other hand it sits in RAM the whole time. I only have 32gb and with unity open as well ran into several crashes. with no mmap the model gets loaded into vram and ram stays free for all the other stuff.
 
+Use `reasoning-preserve = true` for qwen models as they were trained with it on. This will increase context use faster so I'll look if I want to revert it. This is a pretty new general flag added [here](https://github.com/ggml-org/llama.cpp/pull/25105)
+
+Switch 27B qwen to unsloth IQ4 version since I had a bit of extra VRAM and its bench numbers are better than the GianniDPC pure IQ4 version.
+I did have some trouble downloading it with the bench or server but ended up doing it with a `llama.cpp-test/llama-cli -hf unsloth/Qwen3.6-27B-MTP-GGUF:IQ4_XS -c 10000 -p hi` command.
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
