@@ -66,7 +66,7 @@ Because of MTP the dense is now usably fast so I switched to mostly use that one
 
 3bit weights + 8bit kv cache leave quite a bit of slack in vram for desktop & browsers n stuff
 
---parallel 1 saves ~1gb of vram over the default 4 and I don't do parallel requests anyways  
+`--parallel 1` saves ~1gb of vram over the default 4 and I don't do parallel requests anyways  
 with that I looked at spec-draft-n-max > 2 for MTP again. 3 is slightly faster on the two test 64t/s -> 67t/s & 76t/s -> 85t/s, 4 slower by quite a lot.
 both tests are rather short context so maybe at larger context even 3 is too much but I'll go with 3 for now.
 
@@ -78,7 +78,7 @@ qwen3.6 27b is good and with MTP at a usable speed so I pretty much use just thi
 trying the [IQ4-pure](https://huggingface.co/GianniDPC/Qwen3.6-27B-IQ4_XS-pure-with-MTP-GGUF) version instead of unsloth Q3_K_XL for 27B MTP since it seems to be basically same size for [better mean kld](https://www.reddit.com/r/LocalLLaMA/comments/1u7vdey/someone_awhile_ago_did_a_quant_shootout_for/os55ap9/).  
 yup it's slightly smaller ~150mb and also runs significantly faster?? ~85t/s vs ~65t/s. I'll use this one for now.
 
-I added --no-mmap to the server args. with it enabled you can kill the server and launch it again and the model will load quickly again but on the other hand it sits in RAM the whole time. I only have 32gb and with unity open as well ran into several crashes. with no mmap the model gets loaded into vram and ram stays free for all the other stuff.
+I added `--no-mmap` to the server args. with it enabled you can kill the server and launch it again and the model will load quickly again but on the other hand it sits in RAM the whole time. I only have 32gb and with unity open as well ran into several crashes. with no mmap the model gets loaded into vram and ram stays free for all the other stuff.
 
 Use `reasoning-preserve = true` for qwen models as they were trained with it on. This will increase context use faster so I'll look if I want to revert it. This is a pretty new general flag added [here](https://github.com/ggml-org/llama.cpp/pull/25105)
 
@@ -88,6 +88,8 @@ I did have some trouble downloading it with the bench or server but ended up doi
 TODO: check out https://github.com/ggml-org/llama.cpp/pull/23869 for MTP benching
 
 Is there now a mmap for VRAM? I noticed that restarting the server doesn't need to load model from disk anymore if it was loaded before. (b9906)
+
+Switch to `no-mmproj-offload` so that I do have vision support if needed. It's doing it on cpu and ram so quite slow at ~2 min for one 1440p image input.
 
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
