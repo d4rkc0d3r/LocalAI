@@ -60,7 +60,7 @@ echo. >> "%OUTPUT_FILE%"
 
 echo Step: Running git log...
 :: Use git log to get commits in range, formatted as markdown
-git log HEAD..origin/%BRANCH% --pretty="### %%h — %%s^n^n*%%an* — %%ad^n%%b^n---" --date=short >> "%OUTPUT_FILE%"
+git log HEAD..origin/%BRANCH% --pretty="### %%h - %%s%%n%%n*%%an* - %%ad%%n%%b%%n%%n---" --date=short >> "%OUTPUT_FILE%"
 echo Step: git log done.
 
 echo.
