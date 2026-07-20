@@ -8,3 +8,4 @@ llama.cpp-test/*
 cudart-llama-bin-win-cuda-12.4-x64/*
 bench_results/*
 .vscode/*
+changes.md

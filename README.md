@@ -93,6 +93,8 @@ Switch to `no-mmproj-offload` so that I do have vision support if needed. It's d
 
 Changed gemma4 models to QAT versions and enable MTP for them too. Load mmproj into vram for 26B and 12B since they are small enough.
 
+https://anbeeld.com/articles/kv-cache-precision-tail-implementation-and-benchmarks
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
