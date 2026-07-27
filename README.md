@@ -95,6 +95,8 @@ Changed gemma4 models to QAT versions and enable MTP for them too. Load mmproj i
 
 https://anbeeld.com/articles/kv-cache-precision-tail-implementation-and-benchmarks
 
+I tried out DFlash for qwen3.6-27B. Imo not worth it, it eats too much vram, speeds up things that are already fast (multiply two numbers 98 t/s vs 120 t/s) with MTP and seems to not win or even be slower where MTP speedup is also small (code review 59 t/s vs 55 t/s). Also maybe a small hit to pp ~1800 t/s vs ~1700 t/s. 
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
