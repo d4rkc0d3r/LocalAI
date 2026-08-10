@@ -13,7 +13,7 @@ set "TIMESTAMP=%dt:~0,8%_%dt:~8,6%"
 set "RESULTS_FILE=%OUTPUT_DIR%\bench_%TIMESTAMP%.md"
 
 :: Common benchmark params (matching models.ini settings)
-set "COMMON_ARGS=-r 5 --prio 1 --delay 1 -o md -p 2048 -n 128 -b 2048 -ub 512 -t 8 -ngl 99 -nkvo 0 --flash-attn 1 -ctk q8_0 -ctv q8_0,q5_1 --mmap 1"
+set "COMMON_ARGS=-r 5 --prio 1 --delay 1 -o md -p 2048 -n 128 -b 2048 -ub 512 -t 8 -ngl 99 -nkvo 0 --flash-attn 1 -ctk q8_0 -ctv q8_0,q5_1 -lm dio"
 
 :: bench seems to have trouble with model switching, so I only run the main model now
 :: its only really for verifying that there was no speed regression with new llama.cpp versions

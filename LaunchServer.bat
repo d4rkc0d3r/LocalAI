@@ -4,5 +4,5 @@ llama.cpp-CUDA\llama-server.exe ^
   --timeout 600 ^
   --models-max 1 ^
   --parallel 1 ^
-  --no-mmap ^
+  --load-mode dio ^
   --log-colors off
