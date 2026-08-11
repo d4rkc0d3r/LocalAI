@@ -97,7 +97,8 @@ https://anbeeld.com/articles/kv-cache-precision-tail-implementation-and-benchmar
 
 I tried out DFlash for qwen3.6-27B. Imo not worth it, it eats too much vram, speeds up things that are already fast (multiply two numbers 98 t/s vs 120 t/s) with MTP and seems to not win or even be slower where MTP speedup is also small (code review 59 t/s vs 55 t/s). Also maybe a small hit to pp ~1800 t/s vs ~1700 t/s. 
 
-Trying out muse glimmer 30B as it seems to fit nicely into VRAM even with f16 kv cache. https://www.reddit.com/r/LocalLLaMA/comments/1vkm42m/muse_glimmer_actually_fits_on_a_single_rtx_3090/
+Trying out muse glimmer 30B as it seems to fit nicely into VRAM even with f16 kv cache. https://www.reddit.com/r/LocalLLaMA/comments/1vkm42m/muse_glimmer_actually_fits_on_a_single_rtx_3090/  
+`spec-draft-n-max = 3` has the best speedup in my worst case test (code review) but runs into power limit on my gpu. using n-max 15 with p-min 0.4 is slightly worse in worst case but way faster in best case and doesn't hit power limit.
 
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
