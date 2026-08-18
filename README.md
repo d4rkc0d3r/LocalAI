@@ -100,6 +100,8 @@ I tried out DFlash for qwen3.6-27B. Imo not worth it, it eats too much vram, spe
 Trying out muse glimmer 30B as it seems to fit nicely into VRAM even with f16 kv cache. https://www.reddit.com/r/LocalLLaMA/comments/1vkm42m/muse_glimmer_actually_fits_on_a_single_rtx_3090/  
 `spec-draft-n-max = 3` has the best speedup in my worst case test (code review) but runs into power limit on my gpu. using n-max 15 with p-min 0.4 is slightly worse in worst case but way faster in best case and doesn't hit power limit.
 
+Trying Ling3 Tiny. its 8B 1.3B active which makes it really cheap to run. light testing shows its surprisingly capable for such a small model. small footprint makes this easily runnable even on 12gb vram cards.
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
