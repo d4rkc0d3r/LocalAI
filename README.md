@@ -19,6 +19,9 @@ needs prerequisites:
   - you might need to adjust the path to `vcvars64.bat` in `build.bat`
 - [CMake](https://cmake.org/download/)
   - verify with `cmake --version`
+- ccache (optional but recommended)
+  - `winget install Ccache.Ccache`
+  - verify with `ccache --version`
 - ninja build system
   - `winget install Ninja-build.Ninja`
   - verify with `ninja --version`

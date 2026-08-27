@@ -15,5 +15,5 @@ python llama.cpp-latest/tools/server/bench/speed-bench/speed_bench.py ^
   --osl 512 ^
   --concurrency 1 ^
   --limit 2 ^
-  --model Muse-Glimmer-30B-Q4-DFlash ^
+  --model Qwen3.8-27B-medium ^
   --output "%RESULTS_FILE%"
