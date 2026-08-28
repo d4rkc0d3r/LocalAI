@@ -105,6 +105,10 @@ Trying out muse glimmer 30B as it seems to fit nicely into VRAM even with f16 kv
 
 Trying Ling3 Tiny. its 8B 1.3B active which makes it really cheap to run. light testing shows its surprisingly capable for such a small model. small footprint makes this easily runnable even on 12gb vram cards.
 
+Qwen3.8-27B good. xhigh reasons a lot though but `reasoning-effort = medium` is very much an upgrade over 3.6 that I will happily use. did not encounter any issues with the model struggling to close its thinking. also reasoning is very adaptive. easy tasks the model basically thinks yep imma do the thing end reasoning. but on hard or just long stuff even medium is happy to spend 10k tokens reasoning for good quality.
+
+Tried DFlash2 on Qwen3.8-27B. still not worth it. at q4 its ~1.5gb more vram, even bigger hit on prefill than dflash and wins only in synthetic oor non tool use multiplying of numbers. at q2 acceptance is so bad its just straight up slower. tried with `spec-draft-n-max = 4`
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
