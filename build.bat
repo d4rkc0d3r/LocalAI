@@ -4,7 +4,7 @@ cmake -B build -G Ninja ^
   -DCMAKE_BUILD_TYPE=Release ^
   -DLLAMA_BUILD_BORINGSSL=ON ^
   -DGGML_CUDA=ON ^
-  -DGGML_CUDA_FA_ALL_QUANTS=ON ^
+  -DGGML_CUDA_FA_QUANTS=f16-f16;bf16-bf16;q8_0-q8_0;q8_0-q5_1;q5_1-q5_1 ^
   -DGGML_NATIVE=ON ^
   -DCMAKE_CUDA_ARCHITECTURES=native
 cmake --build build -j

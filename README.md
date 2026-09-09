@@ -115,7 +115,7 @@ Tried DFlash2 on Qwen3.8-27B. still not worth it. at q4 its ~1.5gb more vram, ev
 * https://www.reddit.com/r/LocalLLaMA/comments/1txlhxu/i_implemented_kvarn_in_my_llamacpp_fork_and_ran/
 
 resources show k needs 8_0 and v is fine with 5_1. in my own test v5_1 was slower token generation speed ~~so I just go with 8_0 for v too~~.
-turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for it to work at full speed.
+turns out you need to rebuild llama.cpp with `-DGGML_CUDA_FA_ALL_QUANTS=ON` for it to work at full speed. this is now deprecated due to [this pr](https://github.com/ggml-org/llama.cpp/pull/28079). I'm switching to `-DGGML_CUDA_FA_QUANTS=f16-f16;bf16-bf16;q8_0-q8_0;q8_0-q5_1;q5_1-q5_1` to only compile very few fa variants.
 
 dense qwen model might be more resistant to kv cache quant so its the only one I use 8_0/5_1 on. the others stay at 8_0/8_0 for now.
 I hope the kvarn gets something like 5_1/5_1 to a similar quality for some extra vram savings in the future.
