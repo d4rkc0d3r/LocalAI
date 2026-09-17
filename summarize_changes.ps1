@@ -17,9 +17,11 @@ $question = 'You are helping me review the newly fetched upstream llama.cpp chan
 $parts = @($question)
 foreach ($f in $Files) {
     $name = Split-Path $f -Leaf
+    $content = (Get-Content -Raw -LiteralPath $f -Encoding UTF8)
+    $content = $content.Replace('<think>', '<START_THINKING_TOKEN>').Replace('</think>', '<END_THINKING_TOKEN>')
     $parts += ''
     $parts += "===== FILE: $name ====="
-    $parts += (Get-Content -Raw -LiteralPath $f -Encoding UTF8)
+    $parts += $content
 }
 $parts += ''
 $parts += '===== END OF FILES ====='
