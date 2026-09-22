@@ -109,6 +109,8 @@ Qwen3.8-27B good. xhigh reasons a lot though but `reasoning-effort = medium` is 
 
 Tried DFlash2 on Qwen3.8-27B. still not worth it. at q4 its ~1.5gb more vram, even bigger hit on prefill than dflash and wins only in synthetic oor non tool use multiplying of numbers. at q2 acceptance is so bad its just straight up slower. tried with `spec-draft-n-max = 4`
 
+Tried `ngram-mod` with default values added on top of mtp spec decoding. Seems to either not impact speed at all or give massive boosts when copying stuff from previous turns or input. Looks like a small free speedup to me.
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
