@@ -111,6 +111,8 @@ Tried DFlash2 on Qwen3.8-27B. still not worth it. at q4 its ~1.5gb more vram, ev
 
 Tried `ngram-mod` with default values added on top of mtp spec decoding. Seems to either not impact speed at all or give massive boosts when copying stuff from previous turns or input. Looks like a small free speedup to me.
 
+Looking forward to more tests for this: https://www.reddit.com/r/LocalLLaMA/comments/1wromzr/adding_logit_penalty_for_wait_maybe_and_perhaps/
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
