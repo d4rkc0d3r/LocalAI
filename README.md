@@ -38,25 +38,42 @@ check `LaunchServer.bat` and `models.ini` to see how to launch the server with t
 can use normal chat interface in browser WebUI by going to:
 `127.0.0.1:8000`
 
-or use in VSCode with extension "Copilot for llama-server LLMs"  
-add to settings.json:
-```json
-"llamaCopilot.endpoints": {
-	"local": {
-		"url": "http://localhost:8000"
-	}
+## Using running llama server in vscode
+open your `chatLanguageModels.json`:  
+model picker -> gear (Mange Language Models) -> right click "Language Models" in top left -> Open Language Models (JSON)
+
+then add the following:
+```js
+{
+  "name": "Llama.cpp",
+  "vendor": "customendpoint",
+  "apiKey": "local",
+  "apiType": "chat-completions",
+  "models": [
+    {
+      "id": "Qwen3.8-27B-medium",
+      "name": "Qwen3.8 27B (medium)",
+      "url": "http://localhost:8000/v1/chat/completions",
+      "toolCalling": true,
+      "vision": false,
+      "contextWindow": 131072,
+      "maxOutputTokens": 31072
+    },
+    {
+      "id": "Gemma4-26B-A4B-Q4-MTP",
+      "name": "Gemma4 26B",
+      "url": "http://localhost:8000/v1/chat/completions",
+      "toolCalling": true,
+      "vision": true,
+      "contextWindow": 131072,
+      "maxOutputTokens": 31072
+    }
+  ]
 }
 ```
+models should now be selectable in model picker.
 
-then in chat model picker click gear wheel "Manage Language Models" and now Llama Server should show up with all models in the models.ini file.
-
-it works well in agent mode then
-
-rant:  
-man do I love to just install a random 500 dl extension...  
-but chat still only supports ollama api instead of openai or rather it supports openai api now too but you cant add a model with that yet in the ui????  
-and llama-server only does openai api and not ollama api  
-I think there is a way now to add custom endpoints but I haven't figured out yet how to do it, so extension it is for now.
+add more models if you need them. match the ids to the [] names in models.ini
 
 ## Random Notes
 these are my notes in chronological order. don't assume early entries are still valid.
