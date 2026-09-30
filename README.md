@@ -75,6 +75,8 @@ models should now be selectable in model picker.
 
 add more models if you need them. match the ids to the [] names in models.ini
 
+I tried responses endpoint too but that seems to fail on the second message, so chat completions it is for now.
+
 ## Random Notes
 these are my notes in chronological order. don't assume early entries are still valid.
 
