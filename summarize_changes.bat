@@ -30,16 +30,10 @@ echo.
 echo Step 2/3: Building request and querying the server...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%summarize_changes.ps1" -ServerUrl "%SERVER_URL%" -Model "%MODEL%" -Output "%OUTPUT_FILE%" -Dir "%SCRIPT_DIR:~0,-1%"
 
-
-
-
-
-
 if errorlevel 1 (
     echo ERROR: request failed. Is the server running with the %MODEL% model loaded?
     exit /b 1
 )
 
 echo Step 3/3: Done.
-
 endlocal
