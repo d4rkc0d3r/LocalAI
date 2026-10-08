@@ -57,7 +57,10 @@ then add the following:
       "toolCalling": true,
       "vision": false,
       "contextWindow": 131072,
-      "maxOutputTokens": 31072
+      "maxOutputTokens": 31072,
+      "modelOptions": {
+				"temperature": null
+      }
     },
     {
       "id": "Gemma4-26B-A4B-Q4-MTP",
@@ -66,14 +69,18 @@ then add the following:
       "toolCalling": true,
       "vision": true,
       "contextWindow": 131072,
-      "maxOutputTokens": 31072
+      "maxOutputTokens": 31072,
+      "modelOptions": {
+				"temperature": null
+      }
     }
   ]
 }
 ```
 models should now be selectable in model picker.
 
-add more models if you need them. match the ids to the [] names in models.ini
+add more models if you need them. match the ids to the [] names in models.ini  
+vscode agent sends temp 0.1 with the request unless you specify null like this!
 
 I tried responses endpoint too but that seems to fail on the second message, so chat completions it is for now.
 
