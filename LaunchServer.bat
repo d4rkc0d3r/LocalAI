@@ -5,4 +5,5 @@ llama.cpp-CUDA\llama-server.exe ^
   --models-max 1 ^
   --parallel 1 ^
   --load-mode dio ^
-  --log-colors off
+  --log-colors off ^
+  --log-file token_stats/raw_server.log
