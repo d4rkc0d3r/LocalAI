@@ -14,3 +14,6 @@ models
 models/*
 token_stats/raw_server.log
 token_stats/parsed_request_stats.md
+token_stats/raw_test_server.log
+token_stats/test_parsed_stats.md
+token_stats/test_server_output.txt
