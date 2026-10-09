@@ -64,6 +64,52 @@ def ts_to_seconds(m):
     return mins * 60 + secs + ms / 1000.0 + us / 1000000.0
 
 
+def set_creation_time_now(path):
+    """Set a file's creation (birth) time to 'now' on Windows.
+
+    NTFS 'tunneling' can make a recreated file (same name as a recently deleted
+    one) inherit a stale creation time cached in the USN journal. Bumping the
+    creation time to now right before deletion makes the tunneled value
+    approximately correct for the next run. No-op on other platforms.
+    """
+    if os.name != "nt":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    class FILETIME(ctypes.Structure):
+        _fields_ = [("dwLowDateTime", wintypes.DWORD),
+                    ("dwHighDateTime", wintypes.DWORD)]
+
+    k32 = ctypes.windll.kernel32
+    k32.CreateFileW.restype = ctypes.c_void_p
+    k32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+        wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+    ]
+    k32.SetFileTime.restype = wintypes.BOOL
+    k32.SetFileTime.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(FILETIME), ctypes.POINTER(FILETIME), ctypes.POINTER(FILETIME),
+    ]
+    k32.CloseHandle.argtypes = [ctypes.c_void_p]
+
+    # Open with FILE_WRITE_ATTRIBUTES so SetFileTime is permitted.
+    FILE_WRITE_ATTRIBUTES = 0x0100
+    OPEN_EXISTING = 3
+    h = k32.CreateFileW(path, FILE_WRITE_ATTRIBUTES, 0, None, OPEN_EXISTING, 0, None)
+    if h is None:
+        return
+
+    # FILETIME = 100ns intervals since 1601-01-01 UTC = unix*1e7 + 11644473600e7
+    unix = datetime.datetime.now().timestamp()
+    ft = int(round(unix * 10_000_000)) + 11644473600 * 10_000_000
+    filetime = FILETIME(ft & 0xFFFFFFFF, (ft >> 32) & 0xFFFFFFFF)
+
+    k32.SetFileTime(h, ctypes.byref(filetime), None, None)
+    k32.CloseHandle(h)
+
+
 # data keys (used to index each row dict)
 KEYS = [
     "model",
@@ -97,8 +143,8 @@ def parse(log_path):
     pending_prompt = None  # (prompt_eval_ms, input_tokens, prompt_tps, cached)
     current_offset = 0.0  # router timestamp (seconds) captured from the proxy line
 
-    # base datetime = file creation time (st_ctime is creation time on Windows)
-    base_dt = datetime.datetime.fromtimestamp(os.stat(log_path).st_ctime)
+    # base datetime = file creation time (st_birthtime is creation time on Windows)
+    base_dt = datetime.datetime.fromtimestamp(os.stat(log_path).st_birthtime)
 
     with open(log_path, "r", encoding="utf-8-sig", errors="replace") as f:
         for line in f:
@@ -171,6 +217,10 @@ def main():
     print(f"[token_stats] appended to {md_path}")
 
     if delete_log:
+        # stamp the creation time to now first so that, if NTFS tunneling
+        # restores a creation date when the server recreates the file, it is
+        # approximately correct rather than a stale cached value
+        set_creation_time_now(log_path)
         try:
             os.remove(log_path)
             print(f"[token_stats] deleted {log_path}")
