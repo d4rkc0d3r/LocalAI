@@ -194,6 +194,7 @@
   #tooltip .tt-row span:first-child { color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
   #tooltip .tt-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
   #tooltip .tt-total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 5px; font-weight: 600; }
+  #tooltip .tt-detail { display: flex; justify-content: flex-end; gap: 10px; font-size: 11px; color: var(--text-dim); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
 
   /* Summary list */
   .model-row { margin-bottom: 12px; }
@@ -214,6 +215,9 @@
     font-size: 13px;
   }
   .grand-total b { font-variant-numeric: tabular-nums; }
+
+  /* styled tooltip for metric buttons */
+  .tt-text { color: var(--text-dim); line-height: 1.5; max-width: 240px; }
 
   .empty { color: var(--text-dim); font-size: 13px; padding: 20px 0; text-align: center; }
 
@@ -240,12 +244,12 @@
   <div class="control-group">
     <label style="margin-right:8px">Metric</label>
     <div class="btn-group" id="metricBtns" role="group" aria-label="Metric">
-      <button type="button" data-metric="tokens" class="active">Tokens</button>
-      <button type="button" data-metric="output">Output</button>
-      <button type="button" data-metric="requests">Requests</button>
+      <button type="button" data-metric="tokens" data-tip="cached + input + output tokens">Tokens</button>
+      <button type="button" data-metric="output" data-tip="output tokens generated">Output</button>
+      <button type="button" data-metric="requests" data-tip="number of requests">Requests</button>
       <button type="button" data-metric="luna"
-        title="Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok">Luna equiv. $</button>
-      <button type="button" data-metric="cache" title="cached ÷ (cached + input), summed per group before dividing">Cache Hit %</button>
+        data-tip="Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok">Luna equiv. $</button>
+      <button type="button" data-metric="cache" data-tip="cached ÷ (cached + input), summed per group before dividing">Cache Hit %</button>
     </div>
   </div>
   <div id="status"></div>
@@ -431,17 +435,24 @@ function aggregateByDay(recs, metric) {
       if (tot > maxTotal) maxTotal = tot;
     }
   } else {
+    // also keep raw cached/input/output per day+model for the tooltip breakdown
+    const detail = {};
     for (const r of recs) {
       const v = metricOf(r, metric);
       const m = perDay[r.day] || (perDay[r.day] = {});
       m[r.model] = (m[r.model] || 0) + v;
+      const dm = detail[r.day] || (detail[r.day] = {});
+      const dc = dm[r.model] || (dm[r.model] = { c: 0, i: 0, o: 0 });
+      dc.c += r.cached; dc.i += r.input; dc.o += r.output;
       let tot = 0;
       for (const k in m) tot += m[k];
       if (tot > maxTotal) maxTotal = tot;
     }
+    const days = Object.keys(perDay).sort();
+    return { days, perDay, maxTotal, detail };
   }
   const days = Object.keys(perDay).sort();
-  return { days, perDay, maxTotal };
+  return { days, perDay, maxTotal, detail: null };
 }
 
 function aggregateByModel(recs, metric) {
@@ -473,7 +484,16 @@ function compact(n) {
 /* ---------- tooltip ---------- */
 const tooltip = document.getElementById("tooltip");
 
-function showTooltip(e, day, metric) {
+const METRIC_TIPS = {
+  tokens:   "cached + input + output tokens",
+  output:   "output tokens generated",
+  requests: "number of requests",
+  luna:     "Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok",
+  cache:    "cached ÷ (cached + input), summed per group before dividing"
+};
+
+// Bar tooltip: per-model breakdown for one day
+function showBarTooltip(e, day, metric) {
   const perDay = current.perDay[day];
   const modelTotals = {};
   let total = 0;
@@ -483,15 +503,46 @@ function showTooltip(e, day, metric) {
     total += v;
   }
   const sorted = models.slice().sort((a, b) => modelTotals[b] - modelTotals[a]);
-  tooltip.innerHTML =
-    '<div class="tt-title">' + shortDay(day) + " — " + metricLabel(metric) + "</div>" +
-    sorted.map(m =>
-      '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
-      m + "</span><span>" + fmtValue(metric, modelTotals[m]) + "</span></div>"
-    ).join("") +
-    '<div class="tt-row tt-total"><span>Total</span><span>' + fmtValue(metric, total) + "</span></div>";
+  let html = '<div class="tt-title">' + shortDay(day) + " — " + metricLabel(metric) + "</div>";
+
+  // Tokens metric: split each model's total into cached / input / output
+  if (metric === "tokens" && current.detail) {
+    const d = current.detail[day] || {};
+    for (const m of sorted) {
+      const c = d[m] || { c: 0, i: 0, o: 0 };
+      html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
+        m + '</span><span>' + fmt(modelTotals[m]) + '</span></div>' +
+        '<div class="tt-detail"><span class="tt-cell">cached ' + fmt(c.c) + '</span>' +
+        '<span class="tt-cell">input ' + fmt(c.i) + '</span>' +
+        '<span class="tt-cell">output ' + fmt(c.o) + '</span></div>';
+    }
+  } else {
+    for (const m of sorted) {
+      html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
+        m + "</span><span>" + fmtValue(metric, modelTotals[m]) + "</span></div>";
+    }
+  }
+  html += '<div class="tt-row tt-total"><span>Total</span><span>' + fmtValue(metric, total) + "</span></div>";
+  tooltip.innerHTML = html;
   tooltip.style.display = "block";
   moveTooltip(e);
+}
+
+// Simple text tooltip for metric buttons
+function showTip(e, title, text) {
+  tooltip.innerHTML = '<div class="tt-title">' + title + '</div><div class="tt-text">' + text + '</div>';
+  tooltip.style.display = "block";
+  moveTooltip(e);
+}
+
+function hideTooltip() {
+  tooltip.style.display = "none";
+}
+
+function wireTooltip(el, title, text) {
+  el.addEventListener("mouseenter", e => showTip(e, title, text));
+  el.addEventListener("mousemove", moveTooltip);
+  el.addEventListener("mouseleave", hideTooltip);
 }
 
 function moveTooltip(e) {
@@ -603,9 +654,9 @@ function renderChart(agg, metric) {
       stack.appendChild(seg);
     }
 
-    stack.addEventListener("mouseenter", e => showTooltip(e, day, metric));
+    stack.addEventListener("mouseenter", e => showBarTooltip(e, day, metric));
     stack.addEventListener("mousemove", moveTooltip);
-    stack.addEventListener("mouseleave", () => tooltip.style.display = "none");
+    stack.addEventListener("mouseleave", hideTooltip);
 
     const label = document.createElement("div");
     label.className = "x-label";
@@ -648,6 +699,12 @@ function renderSummary(perModel, metric) {
 
 /* ---------- wiring ---------- */
 document.getElementById("rangeSel").addEventListener("change", render);
+
+// styled tooltips on metric buttons
+for (const b of document.querySelectorAll("#metricBtns button")) {
+  wireTooltip(b, metricLabel(b.dataset.metric), METRIC_TIPS[b.dataset.metric] || "");
+}
+
 document.getElementById("metricBtns").addEventListener("click", e => {
   const btn = e.target.closest("button[data-metric]");
   if (!btn || btn.classList.contains("active")) return;
