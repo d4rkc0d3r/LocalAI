@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Token Stats Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg-panel: #171a23;
+    --bg-inset: #1d212e;
+    --border: #2a2f3f;
+    --text: #e6e9f0;
+    --text-dim: #8b93a7;
+    --accent: #4f8cff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    padding: 24px;
+    min-height: 100vh;
+  }
+
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+  h1 small { color: var(--text-dim); font-weight: 400; font-size: 13px; margin-left: 10px; }
+
+  .controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .control-group { display: flex; align-items: center; gap: 8px; }
+  .control-group label { color: var(--text-dim); font-size: 13px; }
+
+  select {
+    background: var(--bg-inset);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+  }
+  select:focus { border-color: var(--accent); }
+
+  #status { color: var(--text-dim); font-size: 13px; margin-left: auto; }
+  #status.error { color: #ff6b6b; }
+
+  .main { display: flex; gap: 20px; align-items: stretch; }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .chart-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .summary-panel { width: 340px; flex-shrink: 0; }
+
+  .panel-title { font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+
+  /* Y axis */
+  .chart-area { display: flex; flex: 1; min-height: 320px; }
+  .y-axis {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding-right: 8px;
+    padding-bottom: 26px; /* align with plot height (leaves room for x labels) */
+  }
+  .bar-region { flex: 1; min-width: 0; position: relative; }
+
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: calc(100% - 26px); /* 26px reserved for x labels */
+    border-bottom: 1px solid var(--border);
+  }
+
+  .bar-group {
+    flex: 1;
+    min-width: 18px;
+    max-width: 72px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .bar-stack {
+    flex: 1;               /* fill the group minus the 26px x-label so % segments resolve */
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: relative;
+    cursor: default;
+  }
+
+  .bar-seg { width: 100%; }
+  .bar-seg:hover { filter: brightness(1.25); }
+
+  .x-label {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    height: 26px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed;
+    display: none;
+    background: #232838;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    max-width: 280px;
+  }
+  #tooltip .tt-title { font-weight: 600; margin-bottom: 6px; }
+  #tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; margin-top: 3px; }
+  #tooltip .tt-row span:first-child { color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
+  #tooltip .tt-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  #tooltip .tt-total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 5px; font-weight: 600; }
+
+  /* Summary list */
+  .model-row { margin-bottom: 12px; }
+  .model-row:last-child { margin-bottom: 0; }
+  .model-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .model-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .model-bar-track { height: 8px; background: var(--bg-inset); border-radius: 4px; overflow: hidden; }
+  .model-bar-fill { height: 100%; border-radius: 4px; }
+  .model-sub { font-size: 11px; color: var(--text-dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  .grand-total {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+  .grand-total b { font-variant-numeric: tabular-nums; }
+
+  .empty { color: var(--text-dim); font-size: 13px; padding: 20px 0; text-align: center; }
+
+  @media (max-width: 900px) {
+    .main { flex-direction: column; }
+    .summary-panel { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Token Stats <small id="subtitle">loading…</small></h1>
+
+<div class="controls">
+  <div class="control-group">
+    <label for="rangeSel">Range</label>
+    <select id="rangeSel">
+      <option value="7">Last 7 Days</option>
+      <option value="30">Last 30 Days</option>
+      <option value="365">Last Year</option>
+      <option value="all">Total</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label for="metricSel">Metric</label>
+    <select id="metricSel">
+      <option value="tokens">Tokens</option>
+      <option value="output">Output</option>
+      <option value="requests">Requests</option>
+    </select>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div class="main">
+  <div class="panel chart-panel">
+    <div class="panel-title" id="chartTitle">Daily Usage</div>
+    <div class="chart-area">
+      <div class="y-axis" id="yAxis"></div>
+      <div class="bar-region">
+        <div class="bars" id="bars"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel summary-panel">
+    <div class="panel-title" id="summaryTitle">Per Model</div>
+    <div id="modelList"></div>
+    <div class="grand-total" id="grandTotal" hidden>
+      <span>Total</span><b id="grandValue"></b>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+"use strict";
+
+const DATA_FILE = "parsed_request_stats.md";
+
+const MODEL_COLORS = [
+  "#4f8cff", "#3ddc97", "#ffa94d", "#e599f7",
+  "#ff6b9d", "#4dd0e1", "#ffca28", "#a1887f"
+];
+const FALLBACK_COLOR = "#5c6370";
+
+/* ---------- state ---------- */
+let records = [];           // parsed rows: {model, cached, input, output, date}
+let models = [];            // unique model names
+let modelColor = {};        // model -> color
+
+/* ---------- helpers ---------- */
+const fmt = n => n.toLocaleString("en-US");
+
+function metricKey(m) {
+  return m === "requests" ? "requests" : (m === "output" ? "output" : "tokens");
+}
+
+function metricLabel(m) {
+  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests" }[m];
+}
+
+function metricOf(r, m) {
+  if (m === "requests") return 1;
+  if (m === "output") return r.output;
+  return r.cached + r.input + r.output;
+}
+
+function dayKey(d) {           // "YYYY-MM-DD" from a "YYYY-MM-DD HH:MM:SS.mmm" string
+  return String(d).slice(0, 10);
+}
+
+function shortDay(day) {       // "2026-10-08" -> "Oct 08"
+  const [y, m, d] = day.split("-");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return months[+m - 1] + " " + d;
+}
+
+/* ---------- data loading ---------- */
+function parseMarkdown(md) {
+  const rows = [];
+  let header = null;
+  for (const line of md.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t.startsWith("|")) continue;
+    const cells = t.split("|").slice(1, -1).map(c => c.trim());
+    if (cells[1] === "---" || /^-+$/.test(cells[1])) continue;   // separator
+    if (!header) { header = cells; continue; }
+    const rec = {};
+    header.forEach((h, i) => rec[h.toLowerCase().replace(/\s+/g, "_")] = cells[i]);
+    const date = rec.date;
+    if (!date || !/^\d{4}-\d{2}-\d{2}/.test(date)) continue;
+    rows.push({
+      model: rec.model || "unknown",
+      cached: parseInt(rec.cached, 10) || 0,
+      input: parseInt(rec.input, 10) || 0,
+      output: parseInt(rec.output, 10) || 0,
+      date,
+      day: dayKey(date)
+    });
+  }
+  return rows;
+}
+
+async function loadData() {
+  const status = document.getElementById("status");
+  try {
+    const res = await fetch(DATA_FILE, { cache: "no-cache" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    records = parseMarkdown(await res.text());
+    status.classList.remove("error");
+    status.textContent = fmt(records.length) + " requests loaded";
+    if (!records.length) throw new Error("no rows parsed");
+    render();
+  } catch (e) {
+    status.classList.add("error");
+    status.textContent = "Failed to load " + DATA_FILE + " — serve this folder over http " +
+      "(e.g. python -m http.server) and reload. (" + e.message + ")";
+  }
+}
+
+/* ---------- range / aggregation ---------- */
+function rangeStartDay(range) {
+  if (range === "all") return null;
+  const maxDay = records.reduce((a, r) => r.day > a ? r.day : a, "");
+  const d = new Date(maxDay + "T00:00:00");
+  d.setDate(d.getDate() - (parseInt(range, 10) - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+function filterByRange(metric, range) {
+  const start = rangeStartDay(range);
+  return records.filter(r => !start || r.day >= start);
+}
+
+function aggregateByDay(recs, metric) {
+  // returns { days: ["YYYY-MM-DD"...], perDay: { day: { model: value } }, maxTotal }
+  const perDay = {};
+  let maxTotal = 0;
+  for (const r of recs) {
+    const v = metricOf(r, metric);
+    const m = perDay[r.day] || (perDay[r.day] = {});
+    m[r.model] = (m[r.model] || 0) + v;
+    let tot = 0;
+    for (const k in m) tot += m[k];
+    if (tot > maxTotal) maxTotal = tot;
+  }
+  const days = Object.keys(perDay).sort();
+  return { days, perDay, maxTotal };
+}
+
+function aggregateByModel(recs, metric) {
+  const perModel = {};
+  for (const r of recs) {
+    perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
+  }
+  return perModel;
+}
+
+/* ---------- formatting ---------- */
+function compact(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(n);
+}
+
+/* ---------- tooltip ---------- */
+const tooltip = document.getElementById("tooltip");
+
+function showTooltip(e, day, metric) {
+  const perDay = current.perDay[day];
+  const modelTotals = {};
+  let total = 0;
+  for (const m of models) {
+    const v = perDay[m] || 0;
+    modelTotals[m] = v;
+    total += v;
+  }
+  const sorted = models.slice().sort((a, b) => modelTotals[b] - modelTotals[a]);
+  tooltip.innerHTML =
+    '<div class="tt-title">' + shortDay(day) + " — " + metricLabel(metric) + "</div>" +
+    sorted.map(m =>
+      '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
+      m + "</span><span>" + fmt(modelTotals[m]) + "</span></div>"
+    ).join("") +
+    '<div class="tt-row tt-total"><span>Total</span><span>' + fmt(total) + "</span></div>";
+  tooltip.style.display = "block";
+  moveTooltip(e);
+}
+
+function moveTooltip(e) {
+  const pad = 14;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  const r = tooltip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+}
+
+/* ---------- render ---------- */
+let current = { days: [], perDay: {}, maxTotal: 0, metric: "tokens", range: "7" };
+
+function colorFor(i) {
+  return MODEL_COLORS[i % MODEL_COLORS.length] || FALLBACK_COLOR;
+}
+
+function render() {
+  const metric = metricKey(document.getElementById("metricSel").value);
+  const range = document.getElementById("rangeSel").value;
+
+  models = records.map(r => r.model);
+  const uniq = [...new Set(models)];
+  models = uniq;
+  modelColor = {};
+  uniq.forEach((m, i) => modelColor[m] = colorFor(i));
+
+  const recs = filterByRange(metric, range);
+  const agg = aggregateByDay(recs, metric);
+  const perModel = aggregateByModel(recs, metric);
+
+  current = { ...agg, metric, range };
+
+  // subtitle
+  const days = agg.days;
+  document.getElementById("subtitle").textContent =
+    days.length
+      ? days[0] + " — " + days[days.length - 1] + "  ·  " + fmt(recs.length) + " requests in range"
+      : "no data in range";
+
+  renderChart(agg, metric);
+  renderSummary(perModel, metric);
+}
+
+function renderChart(agg, metric) {
+  const { days, perDay, maxTotal } = agg;
+  const bars = document.getElementById("bars");
+  const yAxis = document.getElementById("yAxis");
+  const top = maxTotal || 1;   // tallest bar spans the full chart height
+
+  document.getElementById("chartTitle").textContent = "Daily " + metricLabel(metric);
+
+  // y axis ticks (6 labels, top → 0)
+  const ticks = 5;
+  yAxis.innerHTML = "";
+  for (let i = ticks; i >= 0; i--) {
+    const el = document.createElement("div");
+    el.textContent = compact(top * i / ticks);
+    yAxis.appendChild(el);
+  }
+
+  bars.innerHTML = "";
+  if (!days.length) {
+    const d = document.createElement("div");
+    d.className = "empty";
+    d.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%";
+    d.textContent = "No data in the selected range";
+    bars.appendChild(d);
+    return;
+  }
+
+  for (const day of days) {
+    const group = document.createElement("div");
+    group.className = "bar-group";
+
+    const stack = document.createElement("div");
+    stack.className = "bar-stack";
+
+    let total = 0;
+    for (const m of models) {
+      const v = perDay[day][m] || 0;
+      if (!v) continue;
+      total += v;
+      const seg = document.createElement("div");
+      seg.className = "bar-seg";
+      seg.style.height = (v / top * 100) + "%";
+      seg.style.background = modelColor[m];
+      stack.appendChild(seg);
+    }
+    if (total === 0) {
+      const seg = document.createElement("div");
+      seg.className = "bar-seg";
+      seg.style.height = "0%";
+      stack.appendChild(seg);
+    }
+
+    stack.addEventListener("mouseenter", e => showTooltip(e, day, metric));
+    stack.addEventListener("mousemove", moveTooltip);
+    stack.addEventListener("mouseleave", () => tooltip.style.display = "none");
+
+    const label = document.createElement("div");
+    label.className = "x-label";
+    label.textContent = shortDay(day);
+
+    group.appendChild(stack);
+    group.appendChild(label);
+    bars.appendChild(group);
+  }
+}
+
+function renderSummary(perModel, metric) {
+  const list = document.getElementById("modelList");
+  const total = models.reduce((a, m) => a + (perModel[m] || 0), 0);
+
+  document.getElementById("summaryTitle").textContent =
+    metricLabel(metric) + " by model";
+
+  const sorted = models.slice().sort((a, b) => (perModel[b] || 0) - (perModel[a] || 0));
+  const maxV = sorted.length ? (perModel[sorted[0]] || 0) : 0;
+
+  list.innerHTML = sorted.map(m => {
+    const v = perModel[m] || 0;
+    const pct = total ? (v / total * 100).toFixed(1) : "0.0";
+    const w = maxV ? (v / maxV * 100) : 0;
+    return '<div class="model-row">' +
+      '<div class="model-row-head">' +
+        '<span class="model-name" title="' + m + '">' + m + "</span>" +
+        '<span class="model-value">' + fmt(v) + "</span>" +
+      "</div>" +
+      '<div class="model-bar-track"><div class="model-bar-fill" style="width:' + w + '%;background:' + modelColor[m] + '"></div></div>' +
+      '<div class="model-sub">' + pct + "% of total</div>" +
+    "</div>";
+  }).join("") || '<div class="empty">No data in range</div>';
+
+  const gt = document.getElementById("grandTotal");
+  gt.hidden = !total;
+  document.getElementById("grandValue").textContent = fmt(total);
+}
+
+/* ---------- wiring ---------- */
+document.getElementById("rangeSel").addEventListener("change", render);
+document.getElementById("metricSel").addEventListener("change", render);
+
+loadData();
+</script>
+</body>
+</html>
