@@ -106,13 +106,30 @@
     padding-right: 8px;
     padding-bottom: 26px; /* align with plot height (leaves room for x labels) */
   }
-  .bar-region { flex: 1; min-width: 0; position: relative; }
+  .bar-region { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .plot-wrap { flex: 1; min-height: 0; position: relative; }
+
+  .grid-lines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%; /* fills the plot area */
+    pointer-events: none;
+  }
+  .grid-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.07);
+  }
 
   .bars {
     display: flex;
     align-items: flex-end;
     gap: 4px;
-    height: calc(100% - 26px); /* 26px reserved for x labels */
+    height: 100%;
     border-bottom: 1px solid var(--border);
   }
 
@@ -139,13 +156,21 @@
   .bar-seg { width: 100%; }
   .bar-seg:hover { filter: brightness(1.25); }
 
+  .x-labels {
+    height: 26px;
+    display: flex;
+    gap: 4px; /* same gaps as .bars so labels align with bars */
+    padding-top: 4px;
+  }
   .x-label {
+    flex: 1;
+    min-width: 18px;
+    max-width: 72px;
     text-align: center;
     font-size: 10px;
     color: var(--text-dim);
-    height: 26px;
     display: flex;
-    align-items: flex-end;
+    align-items: flex-start;
     justify-content: center;
     white-space: nowrap;
   }
@@ -218,7 +243,9 @@
       <button type="button" data-metric="tokens" class="active">Tokens</button>
       <button type="button" data-metric="output">Output</button>
       <button type="button" data-metric="requests">Requests</button>
-      <button type="button" data-metric="luna">Luna equiv. $</button>
+      <button type="button" data-metric="luna"
+        title="Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok">Luna equiv. $</button>
+      <button type="button" data-metric="cache" title="cached ÷ (cached + input), summed per group before dividing">Cache Hit %</button>
     </div>
   </div>
   <div id="status"></div>
@@ -230,7 +257,10 @@
     <div class="chart-area">
       <div class="y-axis" id="yAxis"></div>
       <div class="bar-region">
-        <div class="bars" id="bars"></div>
+        <div class="plot-wrap">
+          <div class="bars" id="bars"></div>
+        </div>
+        <div class="x-labels" id="xLabels"></div>
       </div>
     </div>
   </div>
@@ -271,7 +301,7 @@ const LUNA = { cached: 0.01, input: 0.10, output: 0.50 };
 const MTOK = 1e6;
 
 function metricLabel(m) {
-  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", luna: "Luna equiv. $" }[m];
+  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", luna: "Luna equiv. $", cache: "Cache Hit %" }[m];
 }
 
 function metricOf(r, m) {
@@ -282,15 +312,22 @@ function metricOf(r, m) {
 }
 
 function isCurrency(m) { return m === "luna"; }
+function isRatio(m)     { return m === "cache"; }
 
-// Format a metric value appropriately (currency vs. plain number)
+// For ratio metrics: per-record cached and (cached+input) parts, summed before dividing
+function ratioParts(r) { return { c: r.cached, t: r.cached + r.input }; }
+function ratioOf(acc)  { return acc.t ? (acc.c / acc.t * 100) : 0; }
+
+// Format a metric value appropriately (currency / ratio / plain number)
 function fmtValue(m, v) {
   if (isCurrency(m)) return "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 });
+  if (isRatio(m))    return v.toFixed(1) + "%";
   return fmt(v);
 }
 
 function compactValue(m, n) {
   if (isCurrency(m)) return "$" + compactMoney(n);
+  if (isRatio(m))    return (Math.round(n)) + "%";
   return compact(n);
 }
 
@@ -374,13 +411,34 @@ function aggregateByDay(recs, metric) {
   // returns { days: ["YYYY-MM-DD"...], perDay: { day: { model: value } }, maxTotal }
   const perDay = {};
   let maxTotal = 0;
-  for (const r of recs) {
-    const v = metricOf(r, metric);
-    const m = perDay[r.day] || (perDay[r.day] = {});
-    m[r.model] = (m[r.model] || 0) + v;
-    let tot = 0;
-    for (const k in m) tot += m[k];
-    if (tot > maxTotal) maxTotal = tot;
+  if (isRatio(metric)) {
+    // accumulate raw sums first, then divide per group
+    const acc = {};
+    for (const r of recs) {
+      const dayM = acc[r.day] || (acc[r.day] = {});
+      const cell = dayM[r.model] || (dayM[r.model] = { c: 0, t: 0 });
+      const p = ratioParts(r);
+      cell.c += p.c; cell.t += p.t;
+    }
+    for (const day in acc) {
+      perDay[day] = {};
+      let tot = 0;
+      for (const model in acc[day]) {
+        const v = ratioOf(acc[day][model]);
+        perDay[day][model] = v;
+        tot += v;
+      }
+      if (tot > maxTotal) maxTotal = tot;
+    }
+  } else {
+    for (const r of recs) {
+      const v = metricOf(r, metric);
+      const m = perDay[r.day] || (perDay[r.day] = {});
+      m[r.model] = (m[r.model] || 0) + v;
+      let tot = 0;
+      for (const k in m) tot += m[k];
+      if (tot > maxTotal) maxTotal = tot;
+    }
   }
   const days = Object.keys(perDay).sort();
   return { days, perDay, maxTotal };
@@ -388,8 +446,18 @@ function aggregateByDay(recs, metric) {
 
 function aggregateByModel(recs, metric) {
   const perModel = {};
-  for (const r of recs) {
-    perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
+  if (isRatio(metric)) {
+    const acc = {};
+    for (const r of recs) {
+      const cell = acc[r.model] || (acc[r.model] = { c: 0, t: 0 });
+      const p = ratioParts(r);
+      cell.c += p.c; cell.t += p.t;
+    }
+    for (const m in acc) perModel[m] = ratioOf(acc[m]);
+  } else {
+    for (const r of recs) {
+      perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
+    }
   }
   return perModel;
 }
@@ -473,7 +541,8 @@ function renderChart(agg, metric) {
   const { days, perDay, maxTotal } = agg;
   const bars = document.getElementById("bars");
   const yAxis = document.getElementById("yAxis");
-  const top = maxTotal || 1;   // tallest bar spans the full chart height
+  const region = bars.parentElement;
+  const top = isRatio(metric) ? 100 : (maxTotal || 1);   // cache-hit axis is always 0–100%
 
   document.getElementById("chartTitle").textContent = "Daily " + metricLabel(metric);
 
@@ -486,7 +555,20 @@ function renderChart(agg, metric) {
     yAxis.appendChild(el);
   }
 
+  // faint gridlines at each tick height (skip the bottom line — it sits on the axis border)
+  let grid = region.querySelector(".grid-lines");
+  if (!grid) { grid = document.createElement("div"); grid.className = "grid-lines"; region.insertBefore(grid, bars); }
+  grid.innerHTML = "";
+  for (let i = 1; i <= ticks; i++) {
+    const line = document.createElement("div");
+    line.className = "grid-line";
+    line.style.top = ((ticks - i) / ticks * 100) + "%";
+    grid.appendChild(line);
+  }
+
+  const xLabels = document.getElementById("xLabels");
   bars.innerHTML = "";
+  xLabels.innerHTML = "";
   if (!days.length) {
     const d = document.createElement("div");
     d.className = "empty";
@@ -530,8 +612,8 @@ function renderChart(agg, metric) {
     label.textContent = shortDay(day);
 
     group.appendChild(stack);
-    group.appendChild(label);
     bars.appendChild(group);
+    xLabels.appendChild(label);
   }
 }
 
