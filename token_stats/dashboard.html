@@ -51,6 +51,32 @@
   }
   select:focus { border-color: var(--accent); }
 
+  .btn-group {
+    display: flex;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .btn-group button {
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    transition: background .12s, color .12s;
+  }
+  .btn-group button + button { border-left: 1px solid var(--border); }
+  .btn-group button:hover { color: var(--text); }
+  .btn-group button.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
   #status { color: var(--text-dim); font-size: 13px; margin-left: auto; }
   #status.error { color: #ff6b6b; }
 
@@ -187,12 +213,13 @@
     </select>
   </div>
   <div class="control-group">
-    <label for="metricSel">Metric</label>
-    <select id="metricSel">
-      <option value="tokens">Tokens</option>
-      <option value="output">Output</option>
-      <option value="requests">Requests</option>
-    </select>
+    <label style="margin-right:8px">Metric</label>
+    <div class="btn-group" id="metricBtns" role="group" aria-label="Metric">
+      <button type="button" data-metric="tokens" class="active">Tokens</button>
+      <button type="button" data-metric="output">Output</button>
+      <button type="button" data-metric="requests">Requests</button>
+      <button type="button" data-metric="luna">Luna equiv. $</button>
+    </div>
   </div>
   <div id="status"></div>
 </div>
@@ -234,22 +261,46 @@ const FALLBACK_COLOR = "#5c6370";
 let records = [];           // parsed rows: {model, cached, input, output, date}
 let models = [];            // unique model names
 let modelColor = {};        // model -> color
+let metric = "tokens";      // currently active metric button
 
 /* ---------- helpers ---------- */
 const fmt = n => n.toLocaleString("en-US");
 
-function metricKey(m) {
-  return m === "requests" ? "requests" : (m === "output" ? "output" : "tokens");
-}
+// Luna pricing, USD per MTok (1e6 tokens)
+const LUNA = { cached: 0.01, input: 0.10, output: 0.50 };
+const MTOK = 1e6;
 
 function metricLabel(m) {
-  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests" }[m];
+  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", luna: "Luna equiv. $" }[m];
 }
 
 function metricOf(r, m) {
   if (m === "requests") return 1;
   if (m === "output") return r.output;
+  if (m === "luna") return (r.cached * LUNA.cached + r.input * LUNA.input + r.output * LUNA.output) / MTOK;
   return r.cached + r.input + r.output;
+}
+
+function isCurrency(m) { return m === "luna"; }
+
+// Format a metric value appropriately (currency vs. plain number)
+function fmtValue(m, v) {
+  if (isCurrency(m)) return "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 });
+  return fmt(v);
+}
+
+function compactValue(m, n) {
+  if (isCurrency(m)) return "$" + compactMoney(n);
+  return compact(n);
+}
+
+// Compact currency with sane precision for axis labels
+function compactMoney(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+  if (n >= 100) return String(Math.round(n));
+  if (n >= 1) return n.toFixed(2);
+  return n.toFixed(n >= 0.1 ? 3 : 4);
 }
 
 function dayKey(d) {           // "YYYY-MM-DD" from a "YYYY-MM-DD HH:MM:SS.mmm" string
@@ -368,9 +419,9 @@ function showTooltip(e, day, metric) {
     '<div class="tt-title">' + shortDay(day) + " — " + metricLabel(metric) + "</div>" +
     sorted.map(m =>
       '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
-      m + "</span><span>" + fmt(modelTotals[m]) + "</span></div>"
+      m + "</span><span>" + fmtValue(metric, modelTotals[m]) + "</span></div>"
     ).join("") +
-    '<div class="tt-row tt-total"><span>Total</span><span>' + fmt(total) + "</span></div>";
+    '<div class="tt-row tt-total"><span>Total</span><span>' + fmtValue(metric, total) + "</span></div>";
   tooltip.style.display = "block";
   moveTooltip(e);
 }
@@ -393,7 +444,6 @@ function colorFor(i) {
 }
 
 function render() {
-  const metric = metricKey(document.getElementById("metricSel").value);
   const range = document.getElementById("rangeSel").value;
 
   models = records.map(r => r.model);
@@ -432,7 +482,7 @@ function renderChart(agg, metric) {
   yAxis.innerHTML = "";
   for (let i = ticks; i >= 0; i--) {
     const el = document.createElement("div");
-    el.textContent = compact(top * i / ticks);
+    el.textContent = compactValue(metric, top * i / ticks);
     yAxis.appendChild(el);
   }
 
@@ -502,7 +552,7 @@ function renderSummary(perModel, metric) {
     return '<div class="model-row">' +
       '<div class="model-row-head">' +
         '<span class="model-name" title="' + m + '">' + m + "</span>" +
-        '<span class="model-value">' + fmt(v) + "</span>" +
+        '<span class="model-value">' + fmtValue(metric, v) + "</span>" +
       "</div>" +
       '<div class="model-bar-track"><div class="model-bar-fill" style="width:' + w + '%;background:' + modelColor[m] + '"></div></div>' +
       '<div class="model-sub">' + pct + "% of total</div>" +
@@ -511,12 +561,19 @@ function renderSummary(perModel, metric) {
 
   const gt = document.getElementById("grandTotal");
   gt.hidden = !total;
-  document.getElementById("grandValue").textContent = fmt(total);
+  document.getElementById("grandValue").textContent = fmtValue(metric, total);
 }
 
 /* ---------- wiring ---------- */
 document.getElementById("rangeSel").addEventListener("change", render);
-document.getElementById("metricSel").addEventListener("change", render);
+document.getElementById("metricBtns").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-metric]");
+  if (!btn || btn.classList.contains("active")) return;
+  for (const b of document.querySelectorAll("#metricBtns button")) b.classList.remove("active");
+  btn.classList.add("active");
+  metric = btn.dataset.metric;
+  render();
+});
 
 loadData();
 </script>
