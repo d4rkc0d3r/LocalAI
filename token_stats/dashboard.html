@@ -278,6 +278,7 @@
       <button type="button" class="active" data-metric="tokens" data-tip="cached + input + output tokens">Tokens</button>
       <button type="button" data-metric="output" data-tip="output tokens generated">Output</button>
       <button type="button" data-metric="requests" data-tip="number of requests">Requests</button>
+      <button type="button" data-metric="time" data-tip="total prefill + output time">Time</button>
       <button type="button" data-metric="luna"
         data-tip="Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok">Luna equiv. $</button>
     </div>
@@ -371,11 +372,12 @@ const LUNA = { cached: 0.01, input: 0.10, output: 0.50 };
 const MTOK = 1e6;
 
 function metricLabel(m) {
-  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", luna: "Luna equiv. $" }[m];
+  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", time: "Time", luna: "Luna equiv. $" }[m];
 }
 
 function metricOf(r, m) {
   if (m === "requests") return 1;
+  if (m === "time") return r.promptMs + r.outputMs;
   if (m === "output") return r.output;
   if (m === "luna") return (r.cached * LUNA.cached + r.input * LUNA.input + r.output * LUNA.output) / MTOK;
   return r.cached + r.input + r.output;
@@ -392,13 +394,25 @@ function ratioOf(acc)  { return acc.t ? (acc.c / acc.t * 100) : 0; }
 function fmtValue(m, v) {
   if (isCurrency(m)) return "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 });
   if (isRatio(m))    return v.toFixed(1) + "%";
+  if (m === "time")  return fmtHms(v);
   return fmt(v);
 }
 
 function compactValue(m, n) {
   if (isCurrency(m)) return "$" + compactMoney(n);
   if (isRatio(m))    return (Math.round(n)) + "%";
+  if (m === "time")  return compactHms(n);
   return compact(n);
+}
+
+// Compact duration label for axis ticks: 2h / 45m / 30s
+function compactHms(n) {
+  const s = Math.round(n / 1000);
+  const h = Math.floor(s / 3600);
+  if (h > 0) return h + "h";
+  const m = Math.floor(s / 60);
+  if (m > 0) return m + "m";
+  return s + "s";
 }
 
 // Compact currency with sane precision for axis labels
@@ -543,15 +557,17 @@ function aggregateByDay(recs, metric) {
       if (tot > maxTotal) maxTotal = tot;
     }
   } else {
-    // also keep raw cached/input/output per day+model for the tooltip breakdown
+    // also keep raw cached/input/output (or prefill/output ms) per day+model for the tooltip breakdown
+    const timeD = metric === "time";
     const detail = {};
     for (const r of recs) {
       const v = metricOf(r, metric);
       const m = perDay[r.day] || (perDay[r.day] = {});
       m[r.model] = (m[r.model] || 0) + v;
       const dm = detail[r.day] || (detail[r.day] = {});
-      const dc = dm[r.model] || (dm[r.model] = { c: 0, i: 0, o: 0 });
-      dc.c += r.cached; dc.i += r.input; dc.o += r.output;
+      const dc = dm[r.model] || (dm[r.model] = timeD ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
+      if (timeD) { dc.p += r.promptMs; dc.o += r.outputMs; }
+      else       { dc.c += r.cached; dc.i += r.input; dc.o += r.output; }
       let tot = 0;
       for (const k in m) tot += m[k];
       if (tot > maxTotal) maxTotal = tot;
@@ -575,10 +591,12 @@ function aggregateByModel(recs, metric) {
     }
     for (const m in acc) perModel[m] = ratioOf(acc[m]);
   } else {
+    const timeM = metric === "time";
     for (const r of recs) {
       perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
-      const d = detail[r.model] || (detail[r.model] = { c: 0, i: 0, o: 0 });
-      d.c += r.cached; d.i += r.input; d.o += r.output;
+      const d = detail[r.model] || (detail[r.model] = timeM ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
+      if (timeM) { d.p += r.promptMs; d.o += r.outputMs; }
+      else       { d.c += r.cached; d.i += r.input; d.o += r.output; }
     }
   }
   return { perModel, detail };
@@ -599,6 +617,7 @@ const METRIC_TIPS = {
   tokens:   "cached + input + output tokens",
   output:   "output tokens generated",
   requests: "number of requests",
+  time:     "total prefill + output time",
   luna:
     '<div class="tt-text">Luna6 price per MTok</div>' +
     '<div class="tt-grid" style="margin-top:8px">' +
@@ -630,13 +649,30 @@ function showBarTooltip(e, day, metric) {
       html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
         m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
         '<div class="tt-detail">' +
-        (money
+        (metric === "time"
+          ? '<span class="tt-cell">prefill ' + fmtHms(c.p) + '</span>' +
+            '<span class="tt-cell">output ' + fmtHms(c.o) + '</span>' +
+            '<span class="tt-cell">output ' + ((c.p + c.o) ? (c.o / (c.p + c.o) * 100).toFixed(1) : "0.0") + '%</span>'
+          : money
           ? '<span class="tt-cell">cached $' + (c.c * LUNA.cached / MTOK).toFixed(4) + '</span>' +
             '<span class="tt-cell">input $' + (c.i * LUNA.input / MTOK).toFixed(4) + '</span>' +
             '<span class="tt-cell">output $' + (c.o * LUNA.output / MTOK).toFixed(4) + '</span>'
           : '<span class="tt-cell">cached ' + fmt(c.c) + '</span>' +
             '<span class="tt-cell">input ' + fmt(c.i) + '</span>' +
             '<span class="tt-cell">output ' + fmt(c.o) + '</span>') +
+        '</div>';
+    }
+  } else if (current.detail && metric === "time") {
+    // Time metric: per-model prefill / output / output-% breakdown
+    const d = current.detail[day] || {};
+    for (const m of sorted) {
+      const c = d[m] || { p: 0, o: 0 };
+      html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
+        m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
+        '<div class="tt-detail">' +
+        '<span class="tt-cell">prefill ' + fmtHms(c.p) + '</span>' +
+        '<span class="tt-cell">output ' + fmtHms(c.o) + '</span>' +
+        '<span class="tt-cell">output ' + ((c.p + c.o) ? (c.o / (c.p + c.o) * 100).toFixed(1) : "0.0") + '%</span>' +
         '</div>';
     }
   } else {
@@ -981,11 +1017,22 @@ function renderSummary(perModel, detail, metric) {
     "</div>";
   }).join("") || '<div class="empty">No data in range</div>';
 
-  // cached / input / output breakdown on hover for tokens & luna
-  const showBreakdown = detail && (metric === "tokens" || metric === "luna");
+  // cached / input / output breakdown on hover for tokens & luna;
+  // prefill / output / output-% for time
+  const showBreakdown = detail && (metric === "tokens" || metric === "luna" || metric === "time");
   for (const row of list.querySelectorAll(".model-row")) {
     const m = row.dataset.model;
     if (showBreakdown) {
+      if (metric === "time") {
+        const c = detail[m] || { p: 0, o: 0 };
+        const share = (c.p + c.o) ? c.o / (c.p + c.o) * 100 : 0;
+        const grid =
+          '<span class="lbl">prefill</span><span class="val">' + fmtHms(c.p) + '</span>' +
+          '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + '</span>' +
+          '<span class="lbl">output share</span><span class="val">' + share.toFixed(1) + "%</span>";
+        wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
+        continue;
+      }
       const c = detail[m] || { c: 0, i: 0, o: 0 };
       // each sub category on its own line; total is already shown in the row
       const vals = metric === "luna"
