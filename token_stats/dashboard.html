@@ -419,8 +419,7 @@ function compactMoney(n) {
   if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
   if (n >= 100) return String(Math.round(n));
-  if (n >= 1) return n.toFixed(2);
-  return n.toFixed(n >= 0.1 ? 3 : 4);
+  return n.toFixed(2);
 }
 
 function dayKey(d) {           // "YYYY-MM-DD" from a "YYYY-MM-DD HH:MM:SS.mmm" string
@@ -815,7 +814,7 @@ function renderSpeedChart() {
     const el = document.createElement("div");
     el.textContent = isRatio
       ? Math.round(top * i / ticks) + "%"
-      : (top * i / ticks).toFixed(1) + " tps";
+      : Math.round(top * i / ticks) + " tps";
     yAxis.appendChild(el);
   }
 
@@ -911,7 +910,12 @@ function renderChart(agg, metric) {
   const bars = document.getElementById("bars");
   const yAxis = document.getElementById("yAxis");
   const region = bars.parentElement;
-  const top = isRatio(metric) ? 100 : (maxTotal || 1);   // cache-hit axis is always 0–100%
+  // round the axis top up to clean steps: ×20 for requests, ×$0.05 for luna
+  let top;
+  if (isRatio(metric)) top = 100;   // cache-hit axis is always 0–100%
+  else if (metric === "requests") top = Math.max(20, Math.ceil((maxTotal || 1) / 20) * 20);
+  else if (metric === "luna")     top = Number((Math.ceil((maxTotal || 1) / 0.05) * 0.05).toFixed(2));
+  else top = maxTotal || 1;
 
   document.getElementById("chartTitle").textContent = "Daily " + metricLabel(metric);
 
