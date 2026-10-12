@@ -156,6 +156,16 @@
   }
 
   .bar-seg { width: 100%; }
+
+  .bar-seg-group {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: relative;   /* paint above the absolute gridlines, like .bar-stack */
+    cursor: default;
+  }
   .bar-seg:hover { filter: brightness(1.25); }
 
   .x-labels {
@@ -316,6 +326,7 @@
           <button type="button" class="active" data-speed="output">Output tps</button>
           <button type="button" data-speed="prompt">Prefill tps</button>
           <button type="button" data-speed="cache">Cache Hit %</button>
+          <button type="button" data-speed="ot">Output time %</button>
         </div>
       </div>
     </div>
@@ -468,7 +479,7 @@ function filterByRange(metric, range) {
   return records.filter(r => !start || r.day >= start);
 }
 
-const speedLabel = m => ({ output: "Output tps", prompt: "Prefill tps", cache: "Cache Hit %" }[m]);
+const speedLabel = m => ({ output: "Output tps", prompt: "Prefill tps", cache: "Cache Hit %", ot: "Output time %" }[m]);
 
 // Tokens-per-second: sum tokens and sum ms first, then divide (not an average of per-request tps)
 // Prefill tps counts only non-cached input tokens; output tps counts output tokens.
@@ -479,15 +490,18 @@ function aggregateSpeedByDay(recs, m) {
   const perDay = {};
   const detail = {};
   for (const r of recs) {
-    const cell = perDay[r.day] || (perDay[r.day] = { tok: 0, ms: 0, cc: 0, ct: 0 });
+    const cell = perDay[r.day] || (perDay[r.day] = { tok: 0, ms: 0, cc: 0, ct: 0, os: 0, tms: 0 });
     cell.tok += speedTokens(r, m);
     cell.ms  += speedMs(r, m);
     cell.cc  += r.cached;
     cell.ct  += r.cached + r.input;
-    const d = detail[r.day] || (detail[r.day] = { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0 });
+    cell.os  += r.outputMs;
+    cell.tms += r.promptMs + r.outputMs;
+    const d = detail[r.day] || (detail[r.day] = { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0, tms: 0 });
     d.ptok += r.input;             d.pms += r.promptMs;
     d.otok += r.output;            d.oms += r.outputMs;
     d.cc   += r.cached;            d.ct  += r.cached + r.input;
+    d.tms  += r.promptMs + r.outputMs;
   }
   // values come from the FINAL per-day sums (what the bars draw), so maxTotal
   // always matches the tallest bar — no running-average spikes
@@ -497,6 +511,8 @@ function aggregateSpeedByDay(recs, m) {
     const c = perDay[day];
     perVal[day] = m === "cache"
       ? (c.ct ? c.cc / c.ct * 100 : 0)
+      : m === "ot"
+      ? (c.tms ? c.os / c.tms * 100 : 0)
       : (c.ms ? c.tok / c.ms * 1000 : 0);
     if (perVal[day] > maxTotal) maxTotal = perVal[day];
   }
@@ -759,16 +775,16 @@ function renderSpeedChart() {
 
   const agg = aggregateSpeedByDay(speedRecs, speedMetric);
   const { days, perDay, maxTotal, detail: spdDetail } = agg;
-  const isCache = speedMetric === "cache";
+  const isRatio = speedMetric === "cache" || speedMetric === "ot";
   // tps axes: round the max bar up to a clean step (20 for output, 200 for prefill)
   const step = speedMetric === "prompt" ? 200 : 20;
-  const top = isCache ? 100 : Math.max(step, Math.ceil(maxTotal / step) * step);
+  const top = isRatio ? 100 : Math.max(step, Math.ceil(maxTotal / step) * step);
   const col = modelColor[speedModel] || FALLBACK_COLOR;
 
   const ticks = 5;
   for (let i = ticks; i >= 0; i--) {
     const el = document.createElement("div");
-    el.textContent = isCache
+    el.textContent = isRatio
       ? Math.round(top * i / ticks) + "%"
       : (top * i / ticks).toFixed(1) + " tps";
     yAxis.appendChild(el);
@@ -799,13 +815,6 @@ function renderSpeedChart() {
 
     const segGroup = document.createElement("div");
     segGroup.className = "bar-seg-group";
-    segGroup.style.display = "flex";
-    segGroup.style.flexDirection = "column";
-    segGroup.style.justifyContent = "flex-end";
-    segGroup.style.flex = "1";
-    segGroup.style.width = "100%";
-    segGroup.style.cursor = "default";
-    segGroup.style.position = "relative";   // paint above the absolute gridlines, like .bar-stack
 
     const v = perDay[day] || 0;
     const segStack = document.createElement("div");
@@ -828,11 +837,22 @@ function renderSpeedChart() {
   }
 }
 
+function fmtHms(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return h + "h " + String(m).padStart(2, "0") + "m " + String(s).padStart(2, "0") + "s";
+  if (m > 0) return m + "m " + String(s).padStart(2, "0") + "s";
+  return s + "s";
+}
+
 function showSpeedDayTooltip(e, day, m, d) {
-  const p = d || { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0 };
+  const p = d || { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0, tms: 0 };
   const pTps = p.pms ? p.ptok / p.pms * 1000 : 0;
   const oTps = p.oms ? p.otok / p.oms * 1000 : 0;
   const pct  = p.ct ? p.cc / p.ct * 100 : 0;
+  const otPct = p.tms ? p.oms / p.tms * 100 : 0;
   const html =
     '<div class="tt-title">' + shortDay(day) + " — " + speedLabel(m) + "</div>" +
     '<div class="tt-grid">' +
@@ -840,12 +860,16 @@ function showSpeedDayTooltip(e, day, m, d) {
       ? '<span class="lbl">cached</span><span class="val">' + fmt(p.cc) + '</span>' +
         '<span class="lbl">cached + input</span><span class="val">' + fmt(p.ct) + '</span>' +
         '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span>"
+      : m === "ot"
+      ? '<span class="lbl">output time</span><span class="val">' + fmtHms(p.oms) + '</span>' +
+        '<span class="lbl">total time</span><span class="val">' + fmtHms(p.tms) + '</span>' +
+        '<span class="lbl">output share</span><span class="val">' + otPct.toFixed(1) + "%</span>"
       : m === "output"
       ? '<span class="lbl">tokens</span><span class="val">' + fmt(p.otok) + '</span>' +
-        '<span class="lbl">time</span><span class="val">' + (p.oms / 1000).toFixed(1) + ' s</span>' +
+        '<span class="lbl">time</span><span class="val">' + fmtHms(p.oms) + '</span>' +
         '<span class="lbl">tps</span><span class="val">' + oTps.toFixed(1) + '</span>'
       : '<span class="lbl">tokens</span><span class="val">' + fmt(p.ptok) + '</span>' +
-        '<span class="lbl">time</span><span class="val">' + (p.pms / 1000).toFixed(1) + ' s</span>' +
+        '<span class="lbl">time</span><span class="val">' + fmtHms(p.pms) + '</span>' +
         '<span class="lbl">tps</span><span class="val">' + pTps.toFixed(1) + '</span>') +
     '</div>';
   tooltip.innerHTML = html;
@@ -1024,10 +1048,14 @@ for (const b of document.querySelectorAll("#metricBtns button")) {
   wireTooltip(b, metricLabel(b.dataset.metric), METRIC_TIPS[b.dataset.metric] || "");
 }
 
-// tooltip on the speed panel's Cache Hit % mode button
+// tooltips on the speed panel's ratio mode buttons
 const cacheSpeedBtn = document.querySelector('#speedBtns button[data-speed="cache"]');
 if (cacheSpeedBtn) {
   wireTooltip(cacheSpeedBtn, "Cache Hit %", "cached / (cached + input)<br>summed per group before dividing");
+}
+const otSpeedBtn = document.querySelector('#speedBtns button[data-speed="ot"]');
+if (otSpeedBtn) {
+  wireTooltip(otSpeedBtn, "Output time %", "output time / total time<br>summed per group before dividing");
 }
 
 document.getElementById("metricBtns").addEventListener("click", e => {
