@@ -17,6 +17,8 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  [hidden] { display: none !important; }
+
   body {
     background: var(--bg);
     color: var(--text);
@@ -223,6 +225,18 @@
   }
   .grand-total b { font-variant-numeric: tabular-nums; }
 
+  .cache-line {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    cursor: default;
+  }
+  .cache-line span { color: var(--text-dim); }
+  .cache-line b { font-variant-numeric: tabular-nums; }
+
   /* styled tooltip for metric buttons */
   .tt-text { color: var(--text-dim); line-height: 1.5; max-width: 240px; }
 
@@ -256,7 +270,6 @@
       <button type="button" data-metric="requests" data-tip="number of requests">Requests</button>
       <button type="button" data-metric="luna"
         data-tip="Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok">Luna equiv. $</button>
-      <button type="button" data-metric="cache" data-tip="cached / (cached + input), summed per group before dividing">Cache Hit %</button>
     </div>
   </div>
   <div id="status"></div>
@@ -282,13 +295,16 @@
     <div class="grand-total" id="grandTotal" hidden>
       <span>Total</span><b id="grandValue"></b>
     </div>
+    <div class="cache-line" id="cacheLine" hidden>
+      <span>Cache Hit %</span><b id="cacheValue"></b>
+    </div>
   </div>
 
   </div>
 </div>
 
 <div class="panel chart-panel speed-panel" id="speedPanel">
-    <div class="panel-title" id="speedTitle">Tokens per Second</div>
+    <div class="panel-title" id="speedTitle">Model Performance</div>
     <div class="controls" style="margin-bottom:14px">
       <div class="control-group">
         <label for="speedModelSel">Model</label>
@@ -299,6 +315,7 @@
         <div class="btn-group" id="speedBtns" role="group" aria-label="Speed mode">
           <button type="button" class="active" data-speed="output">Output tps</button>
           <button type="button" data-speed="prompt">Prefill tps</button>
+          <button type="button" data-speed="cache">Cache Hit %</button>
         </div>
       </div>
     </div>
@@ -343,7 +360,7 @@ const LUNA = { cached: 0.01, input: 0.10, output: 0.50 };
 const MTOK = 1e6;
 
 function metricLabel(m) {
-  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", luna: "Luna equiv. $", cache: "Cache Hit %" }[m];
+  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", luna: "Luna equiv. $" }[m];
 }
 
 function metricOf(r, m) {
@@ -451,7 +468,7 @@ function filterByRange(metric, range) {
   return records.filter(r => !start || r.day >= start);
 }
 
-const speedLabel = m => m === "output" ? "Output tps" : "Prefill tps";
+const speedLabel = m => ({ output: "Output tps", prompt: "Prefill tps", cache: "Cache Hit %" }[m]);
 
 // Tokens-per-second: sum tokens and sum ms first, then divide (not an average of per-request tps)
 // Prefill tps counts only non-cached input tokens; output tps counts output tokens.
@@ -463,18 +480,26 @@ function aggregateSpeedByDay(recs, m) {
   const detail = {};
   let maxTotal = 0;
   for (const r of recs) {
-    const cell = perDay[r.day] || (perDay[r.day] = { tok: 0, ms: 0 });
+    const cell = perDay[r.day] || (perDay[r.day] = { tok: 0, ms: 0, cc: 0, ct: 0 });
     cell.tok += speedTokens(r, m);
     cell.ms  += speedMs(r, m);
-    const d = detail[r.day] || (detail[r.day] = { ptok: 0, pms: 0, otok: 0, oms: 0 });
+    cell.cc  += r.cached;
+    cell.ct  += r.cached + r.input;
+    const d = detail[r.day] || (detail[r.day] = { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0 });
     d.ptok += r.input;             d.pms += r.promptMs;
     d.otok += r.output;            d.oms += r.outputMs;
-    const v = cell.ms ? cell.tok / cell.ms * 1000 : 0;
+    d.cc   += r.cached;            d.ct  += r.cached + r.input;
+    const v = m === "cache"
+      ? (cell.ct ? cell.cc / cell.ct * 100 : 0)
+      : (cell.ms ? cell.tok / cell.ms * 1000 : 0);
     if (v > maxTotal) maxTotal = v;
   }
   const perVal = {};
   for (const day in perDay) {
-    perVal[day] = perDay[day].ms ? perDay[day].tok / perDay[day].ms * 1000 : 0;
+    const c = perDay[day];
+    perVal[day] = m === "cache"
+      ? (c.ct ? c.cc / c.ct * 100 : 0)
+      : (c.ms ? c.tok / c.ms * 1000 : 0);
   }
   return { days: Object.keys(perVal).sort(), perDay: perVal, maxTotal, detail };
 }
@@ -565,8 +590,7 @@ const METRIC_TIPS = {
     '<span class="lbl">cached</span><span class="val">$' + LUNA.cached.toFixed(2) + '</span>' +
     '<span class="lbl">input</span><span class="val">$' + LUNA.input.toFixed(2) + '</span>' +
     '<span class="lbl">output</span><span class="val">$' + LUNA.output.toFixed(2) + '</span>' +
-    '</div>',
-  cache:    "cached / (cached + input)<br>summed per group before dividing"
+    '</div>'
 };
 
 // Bar tooltip: per-model breakdown for one day
@@ -659,6 +683,14 @@ function render() {
   const agg = aggregateByDay(recs, metric);
   const modelAgg = aggregateByModel(recs, metric);
 
+  // keep the selected speed model, but (re)default to the top model in the
+  // right-panel list when nothing is selected or it's no longer in range
+  if (!speedModel || !modelAgg.perModel[speedModel]) {
+    const top = models.slice()
+      .sort((a, b) => (modelAgg.perModel[b] || 0) - (modelAgg.perModel[a] || 0))[0];
+    speedModel = top && (modelAgg.perModel[top] || 0) > 0 ? top : null;
+  }
+
   current = { ...agg, metric, range };
 
   // subtitle
@@ -670,6 +702,7 @@ function render() {
 
   renderChart(agg, metric);
   renderSummary(modelAgg.perModel, modelAgg.detail, metric);
+  renderCacheLine(recs);
   renderSpeedPanel(recs);
 }
 
@@ -692,7 +725,7 @@ function updateSpeedControls() {
   t.innerHTML = speedModel
     ? '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + (modelColor[speedModel] || FALLBACK_COLOR) + ';margin-right:8px"></span>'
         + speedLabel(speedMetric) + " — " + speedModel
-    : "Tokens per Second";
+    : "Model Performance";
 }
 
 function renderSpeedChart() {
@@ -716,24 +749,27 @@ function renderSpeedChart() {
   }
 
   if (!speedModel) {
-    document.getElementById("speedTitle").textContent = "Tokens per Second";
+    document.getElementById("speedTitle").textContent = "Model Performance";
     const d = document.createElement("div");
     d.className = "empty";
     d.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%";
-    d.textContent = "Click a model on the right (or use the dropdown) to see its processing speed";
+    d.textContent = "Click a model on the right (or use the dropdown) to see its performance";
     bars.appendChild(d);
     return;
   }
 
   const agg = aggregateSpeedByDay(speedRecs, speedMetric);
   const { days, perDay, maxTotal, detail: spdDetail } = agg;
-  const top = maxTotal || 1;
+  const isCache = speedMetric === "cache";
+  const top = isCache ? 100 : (maxTotal || 1);
   const col = modelColor[speedModel] || FALLBACK_COLOR;
 
   const ticks = 5;
   for (let i = ticks; i >= 0; i--) {
     const el = document.createElement("div");
-    el.textContent = (top * i / ticks).toFixed(1) + " tps";
+    el.textContent = isCache
+      ? Math.round(top * i / ticks) + "%"
+      : (top * i / ticks).toFixed(1) + " tps";
     yAxis.appendChild(el);
   }
 
@@ -791,13 +827,18 @@ function renderSpeedChart() {
 }
 
 function showSpeedDayTooltip(e, day, m, d) {
-  const p = d || { ptok: 0, pms: 0, otok: 0, oms: 0 };
+  const p = d || { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0 };
   const pTps = p.pms ? p.ptok / p.pms * 1000 : 0;
   const oTps = p.oms ? p.otok / p.oms * 1000 : 0;
+  const pct  = p.ct ? p.cc / p.ct * 100 : 0;
   const html =
     '<div class="tt-title">' + shortDay(day) + " — " + speedLabel(m) + "</div>" +
     '<div class="tt-grid">' +
-    (m === "output"
+    (m === "cache"
+      ? '<span class="lbl">cached</span><span class="val">' + fmt(p.cc) + '</span>' +
+        '<span class="lbl">cached + input</span><span class="val">' + fmt(p.ct) + '</span>' +
+        '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span>"
+      : m === "output"
       ? '<span class="lbl">tokens</span><span class="val">' + fmt(p.otok) + '</span>' +
         '<span class="lbl">time</span><span class="val">' + (p.oms / 1000).toFixed(1) + ' s</span>' +
         '<span class="lbl">tps</span><span class="val">' + oTps.toFixed(1) + '</span>'
@@ -926,9 +967,15 @@ function renderSummary(perModel, detail, metric) {
            "$" + (c.i * LUNA.input / MTOK).toFixed(4),
            "$" + (c.o * LUNA.output / MTOK).toFixed(4)]
         : [fmt(c.c), fmt(c.i), fmt(c.o)];
-      const grid = ['cached', 'input', 'output'].map((lbl, i) =>
+      let grid = ['cached', 'input', 'output'].map((lbl, i) =>
         '<span class="lbl">' + lbl + '</span><span class="val">' + vals[i] + '</span>'
       ).join('');
+      // tokens metric: also show this model's cache hit rate
+      if (metric === "tokens") {
+        const t = c.c + c.i;
+        const pct = t ? c.c / t * 100 : 0;
+        grid += '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span>";
+      }
       wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
     } else {
       wireTooltip(row, m, "<span>" + fmtValue(metric, perModel[m] || 0) + "</span>");
@@ -939,6 +986,23 @@ function renderSummary(perModel, detail, metric) {
   const gt = document.getElementById("grandTotal");
   gt.hidden = !total;
   document.getElementById("grandValue").textContent = fmtValue(metric, total);
+}
+
+// Cache Hit % for the whole range (sum cached and cached+input first, then divide).
+// Only shown while the Tokens metric is active.
+function renderCacheLine(recs) {
+  const line = document.getElementById("cacheLine");
+  if (metric !== "tokens") { line.hidden = true; return; }
+  let c = 0, t = 0;
+  for (const r of recs) { c += r.cached; t += r.cached + r.input; }
+  if (!t) { line.hidden = true; return; }
+  const pct = c / t * 100;
+  line.hidden = false;
+  document.getElementById("cacheValue").textContent = pct.toFixed(1) + "%";
+  wireTooltip(line, "Cache Hit %", '<div class="tt-grid">' +
+    '<span class="lbl">cached tokens</span><span class="val">' + fmt(c) + '</span>' +
+    '<span class="lbl">cached + input</span><span class="val">' + fmt(t) + '</span>' +
+    '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span></div>");
 }
 
 // Picking a model (by clicking its row, or via the dropdown) re-renders
@@ -956,6 +1020,12 @@ document.getElementById("rangeSel").addEventListener("change", render);
 // styled tooltips on metric buttons
 for (const b of document.querySelectorAll("#metricBtns button")) {
   wireTooltip(b, metricLabel(b.dataset.metric), METRIC_TIPS[b.dataset.metric] || "");
+}
+
+// tooltip on the speed panel's Cache Hit % mode button
+const cacheSpeedBtn = document.querySelector('#speedBtns button[data-speed="cache"]');
+if (cacheSpeedBtn) {
+  wireTooltip(cacheSpeedBtn, "Cache Hit %", "cached / (cached + input)<br>summed per group before dividing");
 }
 
 document.getElementById("metricBtns").addEventListener("click", e => {
