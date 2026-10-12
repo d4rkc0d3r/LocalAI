@@ -805,6 +805,7 @@ function renderSpeedChart() {
     segGroup.style.flex = "1";
     segGroup.style.width = "100%";
     segGroup.style.cursor = "default";
+    segGroup.style.position = "relative";   // paint above the absolute gridlines, like .bar-stack
 
     const v = perDay[day] || 0;
     const segStack = document.createElement("div");
