@@ -200,8 +200,12 @@
   #tooltip .tt-grid .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
 
   /* Summary list */
-  .model-row { margin-bottom: 12px; }
+  .model-row { margin-bottom: 12px; cursor: pointer; border-left: 2px solid transparent; padding-left: 8px; transition: border-color .12s, background .12s; }
   .model-row:last-child { margin-bottom: 0; }
+  .model-row:hover { background: rgba(255,255,255,0.04); }
+  .model-row.selected { border-left-color: var(--accent); background: rgba(79,140,255,0.10); }
+
+  .speed-panel { margin-top: 20px; }
   .model-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
   .model-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -279,6 +283,34 @@
       <span>Total</span><b id="grandValue"></b>
     </div>
   </div>
+
+  </div>
+</div>
+
+<div class="panel chart-panel speed-panel" id="speedPanel">
+    <div class="panel-title" id="speedTitle">Tokens per Second</div>
+    <div class="controls" style="margin-bottom:14px">
+      <div class="control-group">
+        <label for="speedModelSel">Model</label>
+        <select id="speedModelSel"></select>
+      </div>
+      <div class="control-group">
+        <span style="margin-right:8px;color:var(--text-dim);font-size:13px">Mode</span>
+        <div class="btn-group" id="speedBtns" role="group" aria-label="Speed mode">
+          <button type="button" class="active" data-speed="output">Output tps</button>
+          <button type="button" data-speed="prompt">Prefill tps</button>
+        </div>
+      </div>
+    </div>
+    <div class="chart-area">
+      <div class="y-axis" id="speedYAxis"></div>
+      <div class="bar-region">
+        <div class="plot-wrap">
+          <div class="bars" id="speedBars"></div>
+        </div>
+        <div class="x-labels" id="speedXLabels"></div>
+      </div>
+    </div>
 </div>
 
 <div id="tooltip"></div>
@@ -299,6 +331,9 @@ let records = [];           // parsed rows: {model, cached, input, output, date}
 let models = [];            // unique model names
 let modelColor = {};        // model -> color
 let metric = "tokens";      // currently active metric button
+let speedRecs = [];         // range-filtered records for the selected speed model
+let speedModel = null;      // model selected via the right panel (or dropdown)
+let speedMetric = "output"; // "output" | "prompt"
 
 /* ---------- helpers ---------- */
 const fmt = n => n.toLocaleString("en-US");
@@ -376,6 +411,8 @@ function parseMarkdown(md) {
       cached: parseInt(rec.cached, 10) || 0,
       input: parseInt(rec.input, 10) || 0,
       output: parseInt(rec.output, 10) || 0,
+      promptMs: parseFloat(rec.prompt_ms) || 0,
+      outputMs: parseFloat(rec.output_ms) || 0,
       date,
       day: dayKey(date)
     });
@@ -412,6 +449,34 @@ function rangeStartDay(range) {
 function filterByRange(metric, range) {
   const start = rangeStartDay(range);
   return records.filter(r => !start || r.day >= start);
+}
+
+const speedLabel = m => m === "output" ? "Output tps" : "Prefill tps";
+
+// Tokens-per-second: sum tokens and sum ms first, then divide (not an average of per-request tps)
+// Prefill tps counts only non-cached input tokens; output tps counts output tokens.
+function speedTokens(r, m)  { return m === "output" ? r.output : r.input; }
+function speedMs(r, m)      { return m === "output" ? r.outputMs : r.promptMs; }
+
+function aggregateSpeedByDay(recs, m) {
+  const perDay = {};
+  const detail = {};
+  let maxTotal = 0;
+  for (const r of recs) {
+    const cell = perDay[r.day] || (perDay[r.day] = { tok: 0, ms: 0 });
+    cell.tok += speedTokens(r, m);
+    cell.ms  += speedMs(r, m);
+    const d = detail[r.day] || (detail[r.day] = { ptok: 0, pms: 0, otok: 0, oms: 0 });
+    d.ptok += r.input;             d.pms += r.promptMs;
+    d.otok += r.output;            d.oms += r.outputMs;
+    const v = cell.ms ? cell.tok / cell.ms * 1000 : 0;
+    if (v > maxTotal) maxTotal = v;
+  }
+  const perVal = {};
+  for (const day in perDay) {
+    perVal[day] = perDay[day].ms ? perDay[day].tok / perDay[day].ms * 1000 : 0;
+  }
+  return { days: Object.keys(perVal).sort(), perDay: perVal, maxTotal, detail };
 }
 
 function aggregateByDay(recs, metric) {
@@ -605,6 +670,144 @@ function render() {
 
   renderChart(agg, metric);
   renderSummary(modelAgg.perModel, modelAgg.detail, metric);
+  renderSpeedPanel(recs);
+}
+
+// Rebuilds only the speed section (after a model is picked) without
+// re-running renderSummary() — that would rebuild the right-panel rows
+// and steal focus from the model dropdown.
+function renderSpeedPanel(recs) {
+  speedRecs = speedModel ? recs.filter(r => r.model === speedModel) : [];
+  updateSpeedControls();
+  renderSpeedChart();
+}
+
+function updateSpeedControls() {
+  const sel = document.getElementById("speedModelSel");
+  if (sel.value !== (speedModel || "")) sel.value = speedModel || "";
+  for (const b of document.querySelectorAll("#speedBtns button")) {
+    b.classList.toggle("active", b.dataset.speed === speedMetric);
+  }
+  const t = document.getElementById("speedTitle");
+  t.innerHTML = speedModel
+    ? '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + (modelColor[speedModel] || FALLBACK_COLOR) + ';margin-right:8px"></span>'
+        + speedLabel(speedMetric) + " — " + speedModel
+    : "Tokens per Second";
+}
+
+function renderSpeedChart() {
+  const bars = document.getElementById("speedBars");
+  const yAxis = document.getElementById("speedYAxis");
+  const xLabels = document.getElementById("speedXLabels");
+  const region = bars.parentElement;
+  bars.innerHTML = "";
+  xLabels.innerHTML = "";
+  yAxis.innerHTML = "";
+
+  // sync model dropdown
+  const sel = document.getElementById("speedModelSel");
+  sel.innerHTML = '<option value="">Select a model…</option>' +
+    models.map(m => '<option value="' + m + '">' + m + "</option>").join("");
+  sel.value = speedModel || "";
+
+  // sync which model row is highlighted
+  for (const row of document.querySelectorAll(".model-row")) {
+    row.classList.toggle("selected", row.dataset.model === speedModel);
+  }
+
+  if (!speedModel) {
+    document.getElementById("speedTitle").textContent = "Tokens per Second";
+    const d = document.createElement("div");
+    d.className = "empty";
+    d.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%";
+    d.textContent = "Click a model on the right (or use the dropdown) to see its processing speed";
+    bars.appendChild(d);
+    return;
+  }
+
+  const agg = aggregateSpeedByDay(speedRecs, speedMetric);
+  const { days, perDay, maxTotal, detail: spdDetail } = agg;
+  const top = maxTotal || 1;
+  const col = modelColor[speedModel] || FALLBACK_COLOR;
+
+  const ticks = 5;
+  for (let i = ticks; i >= 0; i--) {
+    const el = document.createElement("div");
+    el.textContent = (top * i / ticks).toFixed(1) + " tps";
+    yAxis.appendChild(el);
+  }
+
+  let grid = region.querySelector(".grid-lines");
+  if (!grid) { grid = document.createElement("div"); grid.className = "grid-lines"; region.insertBefore(grid, bars); }
+  grid.innerHTML = "";
+  for (let i = 1; i <= ticks; i++) {
+    const line = document.createElement("div");
+    line.className = "grid-line";
+    line.style.top = ((ticks - i) / ticks * 100) + "%";
+    grid.appendChild(line);
+  }
+
+  if (!days.length) {
+    const d = document.createElement("div");
+    d.className = "empty";
+    d.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%";
+    d.textContent = "No data in range";
+    bars.appendChild(d);
+    return;
+  }
+
+  for (const day of days) {
+    const group = document.createElement("div");
+    group.className = "bar-group";
+
+    const segGroup = document.createElement("div");
+    segGroup.className = "bar-seg-group";
+    segGroup.style.display = "flex";
+    segGroup.style.flexDirection = "column";
+    segGroup.style.justifyContent = "flex-end";
+    segGroup.style.flex = "1";
+    segGroup.style.width = "100%";
+    segGroup.style.cursor = "default";
+
+    const v = perDay[day] || 0;
+    const segStack = document.createElement("div");
+    segStack.style.height = (v / top * 100) + "%";
+    segStack.style.background = col;
+    segStack.style.width = "100%";
+    segGroup.appendChild(segStack);
+
+    segGroup.addEventListener("mouseenter", e => showSpeedDayTooltip(e, day, speedMetric, spdDetail[day]));
+    segGroup.addEventListener("mousemove", moveTooltip);
+    segGroup.addEventListener("mouseleave", hideTooltip);
+
+    const label = document.createElement("div");
+    label.className = "x-label";
+    label.textContent = shortDay(day);
+
+    group.appendChild(segGroup);
+    bars.appendChild(group);
+    xLabels.appendChild(label);
+  }
+}
+
+function showSpeedDayTooltip(e, day, m, d) {
+  const p = d || { ptok: 0, pms: 0, otok: 0, oms: 0 };
+  const pTps = p.pms ? p.ptok / p.pms * 1000 : 0;
+  const oTps = p.oms ? p.otok / p.oms * 1000 : 0;
+  const html =
+    '<div class="tt-title">' + shortDay(day) + " — " + speedLabel(m) + "</div>" +
+    '<div class="tt-grid">' +
+    (m === "output"
+      ? '<span class="lbl">tokens</span><span class="val">' + fmt(p.otok) + '</span>' +
+        '<span class="lbl">time</span><span class="val">' + (p.oms / 1000).toFixed(1) + ' s</span>' +
+        '<span class="lbl">tps</span><span class="val">' + oTps.toFixed(1) + '</span>'
+      : '<span class="lbl">tokens</span><span class="val">' + fmt(p.ptok) + '</span>' +
+        '<span class="lbl">time</span><span class="val">' + (p.pms / 1000).toFixed(1) + ' s</span>' +
+        '<span class="lbl">tps</span><span class="val">' + pTps.toFixed(1) + '</span>') +
+    '</div>';
+  tooltip.innerHTML = html;
+  tooltip.style.display = "block";
+  moveTooltip(e);
 }
 
 function renderChart(agg, metric) {
@@ -730,11 +933,21 @@ function renderSummary(perModel, detail, metric) {
     } else {
       wireTooltip(row, m, "<span>" + fmtValue(metric, perModel[m] || 0) + "</span>");
     }
+    row.addEventListener("click", () => selectSpeedModel(m));
   }
 
   const gt = document.getElementById("grandTotal");
   gt.hidden = !total;
   document.getElementById("grandValue").textContent = fmtValue(metric, total);
+}
+
+// Picking a model (by clicking its row, or via the dropdown) re-renders
+// only the speed section, not the summary — see renderSpeedPanel().
+function selectSpeedModel(m, keepSel) {
+  speedModel = m;
+  const sel = document.getElementById("speedModelSel");
+  if (!keepSel && sel.value !== m) sel.value = m;
+  renderSpeedPanel(filterByRange(metric, document.getElementById("rangeSel").value));
 }
 
 /* ---------- wiring ---------- */
@@ -752,6 +965,21 @@ document.getElementById("metricBtns").addEventListener("click", e => {
   btn.classList.add("active");
   metric = btn.dataset.metric;
   render();
+});
+
+document.getElementById("speedModelSel").addEventListener("change", e => {
+  speedModel = e.target.value || null;
+  const recs = filterByRange(metric, document.getElementById("rangeSel").value);
+  renderSpeedPanel(recs);
+});
+
+document.getElementById("speedBtns").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-speed]");
+  if (!btn || btn.classList.contains("active")) return;
+  for (const b of document.querySelectorAll("#speedBtns button")) b.classList.remove("active");
+  btn.classList.add("active");
+  speedMetric = btn.dataset.speed;
+  renderSpeedPanel(speedRecs);
 });
 
 loadData();
