@@ -252,7 +252,7 @@
       <button type="button" data-metric="requests" data-tip="number of requests">Requests</button>
       <button type="button" data-metric="luna"
         data-tip="Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok">Luna equiv. $</button>
-      <button type="button" data-metric="cache" data-tip="cached ÷ (cached + input), summed per group before dividing">Cache Hit %</button>
+      <button type="button" data-metric="cache" data-tip="cached / (cached + input), summed per group before dividing">Cache Hit %</button>
     </div>
   </div>
   <div id="status"></div>
@@ -494,8 +494,14 @@ const METRIC_TIPS = {
   tokens:   "cached + input + output tokens",
   output:   "output tokens generated",
   requests: "number of requests",
-  luna:     "Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok",
-  cache:    "cached ÷ (cached + input), summed per group before dividing"
+  luna:
+    '<div class="tt-text">Luna6 price per MTok</div>' +
+    '<div class="tt-grid" style="margin-top:8px">' +
+    '<span class="lbl">cached</span><span class="val">$' + LUNA.cached.toFixed(2) + '</span>' +
+    '<span class="lbl">input</span><span class="val">$' + LUNA.input.toFixed(2) + '</span>' +
+    '<span class="lbl">output</span><span class="val">$' + LUNA.output.toFixed(2) + '</span>' +
+    '</div>',
+  cache:    "cached / (cached + input)<br>summed per group before dividing"
 };
 
 // Bar tooltip: per-model breakdown for one day
