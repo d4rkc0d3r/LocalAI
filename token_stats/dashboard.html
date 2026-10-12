@@ -275,12 +275,11 @@
   <div class="control-group">
     <label style="margin-right:8px">Metric</label>
     <div class="btn-group" id="metricBtns" role="group" aria-label="Metric">
-      <button type="button" class="active" data-metric="tokens" data-tip="cached + input + output tokens">Tokens</button>
-      <button type="button" data-metric="output" data-tip="output tokens generated">Output</button>
-      <button type="button" data-metric="requests" data-tip="number of requests">Requests</button>
-      <button type="button" data-metric="time" data-tip="total prefill + output time">Time</button>
-      <button type="button" data-metric="luna"
-        data-tip="Luna pricing assumed: $0.01 / cached MTok · $0.10 / input MTok · $0.50 / output MTok">Luna equiv. $</button>
+      <button type="button" class="active" data-metric="tokens">Tokens</button>
+      <button type="button" data-metric="output">Output</button>
+      <button type="button" data-metric="requests">Requests</button>
+      <button type="button" data-metric="time">Time</button>
+      <button type="button" data-metric="luna">Luna equiv. $</button>
     </div>
   </div>
   <div id="status"></div>
@@ -360,8 +359,8 @@ let models = [];            // unique model names
 let modelColor = {};        // model -> color
 let metric = "tokens";      // currently active metric button
 let speedRecs = [];         // range-filtered records for the selected speed model
-let speedModel = null;      // model selected via the right panel (or dropdown)
-let speedMetric = "output"; // "output" | "prompt"
+let speedModel = null;        // model selected via the right panel (or dropdown)
+let speedMetric = "output";   // "output" | "prompt" | "cache" | "ot"
 
 /* ---------- helpers ---------- */
 const fmt = n => n.toLocaleString("en-US");
@@ -383,23 +382,16 @@ function metricOf(r, m) {
 }
 
 function isCurrency(m) { return m === "luna"; }
-function isRatio(m)     { return m === "cache"; }
 
-// For ratio metrics: per-record cached and (cached+input) parts, summed before dividing
-function ratioParts(r) { return { c: r.cached, t: r.cached + r.input }; }
-function ratioOf(acc)  { return acc.t ? (acc.c / acc.t * 100) : 0; }
-
-// Format a metric value appropriately (currency / ratio / plain number)
+// Format a metric value appropriately (currency / time / plain number)
 function fmtValue(m, v) {
-  if (isCurrency(m)) return "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 });
-  if (isRatio(m))    return v.toFixed(1) + "%";
+  if (isCurrency(m)) return "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (m === "time")  return fmtHms(v);
   return fmt(v);
 }
 
 function compactValue(m, n) {
   if (isCurrency(m)) return "$" + compactMoney(n);
-  if (isRatio(m))    return (Math.round(n)) + "%";
   if (m === "time")  return compactHms(n);
   return compact(n);
 }
@@ -486,7 +478,7 @@ function rangeStartDay(range) {
   return d.toISOString().slice(0, 10);
 }
 
-function filterByRange(metric, range) {
+function filterByRange(range) {
   const start = rangeStartDay(range);
   return records.filter(r => !start || r.day >= start);
 }
@@ -532,70 +524,38 @@ function aggregateSpeedByDay(recs, m) {
 }
 
 function aggregateByDay(recs, metric) {
-  // returns { days: ["YYYY-MM-DD"...], perDay: { day: { model: value } }, maxTotal }
+  // returns { days: ["YYYY-MM-DD"...], perDay: { day: { model: value } }, maxTotal, detail }
+  // detail keeps raw sums per day+model (cached/input/output, or prefill/output ms
+  // for the "time" metric) for the tooltip breakdown
+  const timeD = metric === "time";
   const perDay = {};
+  const detail = {};
   let maxTotal = 0;
-  if (isRatio(metric)) {
-    // accumulate raw sums first, then divide per group
-    const acc = {};
-    for (const r of recs) {
-      const dayM = acc[r.day] || (acc[r.day] = {});
-      const cell = dayM[r.model] || (dayM[r.model] = { c: 0, t: 0 });
-      const p = ratioParts(r);
-      cell.c += p.c; cell.t += p.t;
-    }
-    for (const day in acc) {
-      perDay[day] = {};
-      let tot = 0;
-      for (const model in acc[day]) {
-        const v = ratioOf(acc[day][model]);
-        perDay[day][model] = v;
-        tot += v;
-      }
-      if (tot > maxTotal) maxTotal = tot;
-    }
-  } else {
-    // also keep raw cached/input/output (or prefill/output ms) per day+model for the tooltip breakdown
-    const timeD = metric === "time";
-    const detail = {};
-    for (const r of recs) {
-      const v = metricOf(r, metric);
-      const m = perDay[r.day] || (perDay[r.day] = {});
-      m[r.model] = (m[r.model] || 0) + v;
-      const dm = detail[r.day] || (detail[r.day] = {});
-      const dc = dm[r.model] || (dm[r.model] = timeD ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
-      if (timeD) { dc.p += r.promptMs; dc.o += r.outputMs; }
-      else       { dc.c += r.cached; dc.i += r.input; dc.o += r.output; }
-      let tot = 0;
-      for (const k in m) tot += m[k];
-      if (tot > maxTotal) maxTotal = tot;
-    }
-    const days = Object.keys(perDay).sort();
-    return { days, perDay, maxTotal, detail };
+  for (const r of recs) {
+    const v = metricOf(r, metric);
+    const m = perDay[r.day] || (perDay[r.day] = {});
+    m[r.model] = (m[r.model] || 0) + v;
+    const dm = detail[r.day] || (detail[r.day] = {});
+    const dc = dm[r.model] || (dm[r.model] = timeD ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
+    if (timeD) { dc.p += r.promptMs; dc.o += r.outputMs; }
+    else       { dc.c += r.cached; dc.i += r.input; dc.o += r.output; }
+    let tot = 0;
+    for (const k in m) tot += m[k];
+    if (tot > maxTotal) maxTotal = tot;
   }
-  const days = Object.keys(perDay).sort();
-  return { days, perDay, maxTotal, detail: null };
+  return { days: Object.keys(perDay).sort(), perDay, maxTotal, detail };
 }
 
 function aggregateByModel(recs, metric) {
   const perModel = {};
-  const detail = {};   // per-model raw cached/input/output sums (for tooltips)
-  if (isRatio(metric)) {
-    const acc = {};
-    for (const r of recs) {
-      const cell = acc[r.model] || (acc[r.model] = { c: 0, t: 0, i: 0, o: 0 });
-      const p = ratioParts(r);
-      cell.c += p.c; cell.t += p.t;
-    }
-    for (const m in acc) perModel[m] = ratioOf(acc[m]);
-  } else {
-    const timeM = metric === "time";
-    for (const r of recs) {
-      perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
-      const d = detail[r.model] || (detail[r.model] = timeM ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
-      if (timeM) { d.p += r.promptMs; d.o += r.outputMs; }
-      else       { d.c += r.cached; d.i += r.input; d.o += r.output; }
-    }
+  // per-model raw sums (cached/input/output, or prefill/output ms for "time") for tooltips
+  const timeM = metric === "time";
+  const detail = {};
+  for (const r of recs) {
+    perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
+    const d = detail[r.model] || (detail[r.model] = timeM ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
+    if (timeM) { d.p += r.promptMs; d.o += r.outputMs; }
+    else       { d.c += r.cached; d.i += r.input; d.o += r.output; }
   }
   return { perModel, detail };
 }
@@ -647,11 +607,7 @@ function showBarTooltip(e, day, metric) {
       html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
         m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
         '<div class="tt-detail">' +
-        (metric === "time"
-          ? '<span class="tt-cell">prefill ' + fmtHms(c.p) + '</span>' +
-            '<span class="tt-cell">output ' + fmtHms(c.o) + '</span>' +
-            '<span class="tt-cell">output ' + ((c.p + c.o) ? (c.o / (c.p + c.o) * 100).toFixed(1) : "0.0") + '%</span>'
-          : money
+        (money
           ? '<span class="tt-cell">cached $' + (c.c * LUNA.cached / MTOK).toFixed(4) + '</span>' +
             '<span class="tt-cell">input $' + (c.i * LUNA.input / MTOK).toFixed(4) + '</span>' +
             '<span class="tt-cell">output $' + (c.o * LUNA.output / MTOK).toFixed(4) + '</span>'
@@ -728,7 +684,7 @@ function render() {
   modelColor = {};
   uniq.forEach((m, i) => modelColor[m] = colorFor(i));
 
-  const recs = filterByRange(metric, range);
+  const recs = filterByRange(range);
   const agg = aggregateByDay(recs, metric);
   const modelAgg = aggregateByModel(recs, metric);
 
@@ -740,7 +696,7 @@ function render() {
     speedModel = top && (modelAgg.perModel[top] || 0) > 0 ? top : null;
   }
 
-  current = { ...agg, metric, range };
+  current = { ...agg, metric };   // range available on demand via rangeSel
 
   // subtitle
   const days = agg.days;
@@ -912,9 +868,8 @@ function renderChart(agg, metric) {
   const region = bars.parentElement;
   // round the axis top up to clean steps: ×20 for requests, ×$0.05 for luna
   let top;
-  if (isRatio(metric)) top = 100;   // cache-hit axis is always 0–100%
-  else if (metric === "requests") top = Math.max(20, Math.ceil((maxTotal || 1) / 20) * 20);
-  else if (metric === "luna")     top = Number((Math.ceil((maxTotal || 1) / 0.05) * 0.05).toFixed(2));
+  if (metric === "requests") top = Math.max(20, Math.ceil((maxTotal || 1) / 20) * 20);
+  else if (metric === "luna") top = Number((Math.ceil((maxTotal || 1) / 0.05) * 0.05).toFixed(2));
   else top = maxTotal || 1;
 
   document.getElementById("chartTitle").textContent = "Daily " + metricLabel(metric);
@@ -1077,11 +1032,11 @@ function renderCacheLine(recs) {
 
 // Picking a model (by clicking its row, or via the dropdown) re-renders
 // only the speed section, not the summary — see renderSpeedPanel().
-function selectSpeedModel(m, keepSel) {
+function selectSpeedModel(m) {
   speedModel = m;
   const sel = document.getElementById("speedModelSel");
-  if (!keepSel && sel.value !== m) sel.value = m;
-  renderSpeedPanel(filterByRange(metric, document.getElementById("rangeSel").value));
+  if (sel.value !== m) sel.value = m;
+  renderSpeedPanel(filterByRange(document.getElementById("rangeSel").value));
 }
 
 /* ---------- wiring ---------- */
@@ -1113,8 +1068,7 @@ document.getElementById("metricBtns").addEventListener("click", e => {
 
 document.getElementById("speedModelSel").addEventListener("change", e => {
   speedModel = e.target.value || null;
-  const recs = filterByRange(metric, document.getElementById("rangeSel").value);
-  renderSpeedPanel(recs);
+  renderSpeedPanel(filterByRange(document.getElementById("rangeSel").value));
 });
 
 document.getElementById("speedBtns").addEventListener("click", e => {
@@ -1123,7 +1077,7 @@ document.getElementById("speedBtns").addEventListener("click", e => {
   for (const b of document.querySelectorAll("#speedBtns button")) b.classList.remove("active");
   btn.classList.add("active");
   speedMetric = btn.dataset.speed;
-  renderSpeedPanel(speedRecs);
+  renderSpeedPanel(filterByRange(document.getElementById("rangeSel").value));
 });
 
 loadData();
