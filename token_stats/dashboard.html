@@ -315,7 +315,6 @@
 </div>
 
 <div class="panel chart-panel speed-panel" id="speedPanel">
-    <div class="panel-title" id="speedTitle">Model Performance</div>
     <div class="controls" style="margin-bottom:14px">
       <div class="control-group">
         <label for="speedModelSel">Model</label>
@@ -772,11 +771,6 @@ function updateSpeedControls() {
   for (const b of document.querySelectorAll("#speedBtns button")) {
     b.classList.toggle("active", b.dataset.speed === speedMetric);
   }
-  const t = document.getElementById("speedTitle");
-  t.innerHTML = speedModel
-    ? '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + (modelColor[speedModel] || FALLBACK_COLOR) + ';margin-right:8px"></span>'
-        + speedLabel(speedMetric) + " — " + speedModel
-    : "Model Performance";
 }
 
 function renderSpeedChart() {
@@ -800,7 +794,6 @@ function renderSpeedChart() {
   }
 
   if (!speedModel) {
-    document.getElementById("speedTitle").textContent = "Model Performance";
     const d = document.createElement("div");
     d.className = "empty";
     d.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%";
