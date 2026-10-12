@@ -478,7 +478,6 @@ function speedMs(r, m)      { return m === "output" ? r.outputMs : r.promptMs; }
 function aggregateSpeedByDay(recs, m) {
   const perDay = {};
   const detail = {};
-  let maxTotal = 0;
   for (const r of recs) {
     const cell = perDay[r.day] || (perDay[r.day] = { tok: 0, ms: 0, cc: 0, ct: 0 });
     cell.tok += speedTokens(r, m);
@@ -489,17 +488,17 @@ function aggregateSpeedByDay(recs, m) {
     d.ptok += r.input;             d.pms += r.promptMs;
     d.otok += r.output;            d.oms += r.outputMs;
     d.cc   += r.cached;            d.ct  += r.cached + r.input;
-    const v = m === "cache"
-      ? (cell.ct ? cell.cc / cell.ct * 100 : 0)
-      : (cell.ms ? cell.tok / cell.ms * 1000 : 0);
-    if (v > maxTotal) maxTotal = v;
   }
+  // values come from the FINAL per-day sums (what the bars draw), so maxTotal
+  // always matches the tallest bar — no running-average spikes
   const perVal = {};
+  let maxTotal = 0;
   for (const day in perDay) {
     const c = perDay[day];
     perVal[day] = m === "cache"
       ? (c.ct ? c.cc / c.ct * 100 : 0)
       : (c.ms ? c.tok / c.ms * 1000 : 0);
+    if (perVal[day] > maxTotal) maxTotal = perVal[day];
   }
   return { days: Object.keys(perVal).sort(), perDay: perVal, maxTotal, detail };
 }
@@ -761,7 +760,9 @@ function renderSpeedChart() {
   const agg = aggregateSpeedByDay(speedRecs, speedMetric);
   const { days, perDay, maxTotal, detail: spdDetail } = agg;
   const isCache = speedMetric === "cache";
-  const top = isCache ? 100 : (maxTotal || 1);
+  // tps axes: round the max bar up to a clean step (20 for output, 200 for prefill)
+  const step = speedMetric === "prompt" ? 200 : 20;
+  const top = isCache ? 100 : Math.max(step, Math.ceil(maxTotal / step) * step);
   const col = modelColor[speedModel] || FALLBACK_COLOR;
 
   const ticks = 5;
