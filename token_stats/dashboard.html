@@ -195,6 +195,9 @@
   #tooltip .tt-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
   #tooltip .tt-total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 5px; font-weight: 600; }
   #tooltip .tt-detail { display: flex; justify-content: flex-end; gap: 10px; font-size: 11px; color: var(--text-dim); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  #tooltip .tt-grid { display: grid; grid-template-columns: max-content 1fr; gap: 3px 16px; }
+  #tooltip .tt-grid .lbl { color: var(--text-dim); }
+  #tooltip .tt-grid .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
 
   /* Summary list */
   .model-row { margin-bottom: 12px; }
@@ -457,10 +460,11 @@ function aggregateByDay(recs, metric) {
 
 function aggregateByModel(recs, metric) {
   const perModel = {};
+  const detail = {};   // per-model raw cached/input/output sums (for tooltips)
   if (isRatio(metric)) {
     const acc = {};
     for (const r of recs) {
-      const cell = acc[r.model] || (acc[r.model] = { c: 0, t: 0 });
+      const cell = acc[r.model] || (acc[r.model] = { c: 0, t: 0, i: 0, o: 0 });
       const p = ratioParts(r);
       cell.c += p.c; cell.t += p.t;
     }
@@ -468,9 +472,11 @@ function aggregateByModel(recs, metric) {
   } else {
     for (const r of recs) {
       perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
+      const d = detail[r.model] || (detail[r.model] = { c: 0, i: 0, o: 0 });
+      d.c += r.cached; d.i += r.input; d.o += r.output;
     }
   }
-  return perModel;
+  return { perModel, detail };
 }
 
 /* ---------- formatting ---------- */
@@ -505,16 +511,23 @@ function showBarTooltip(e, day, metric) {
   const sorted = models.slice().sort((a, b) => modelTotals[b] - modelTotals[a]);
   let html = '<div class="tt-title">' + shortDay(day) + " — " + metricLabel(metric) + "</div>";
 
-  // Tokens metric: split each model's total into cached / input / output
-  if (metric === "tokens" && current.detail) {
+  // Tokens / Luna metrics: split each model's total into cached / input / output
+  if (current.detail && (metric === "tokens" || metric === "luna")) {
+    const money = metric === "luna";
     const d = current.detail[day] || {};
     for (const m of sorted) {
       const c = d[m] || { c: 0, i: 0, o: 0 };
       html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
-        m + '</span><span>' + fmt(modelTotals[m]) + '</span></div>' +
-        '<div class="tt-detail"><span class="tt-cell">cached ' + fmt(c.c) + '</span>' +
-        '<span class="tt-cell">input ' + fmt(c.i) + '</span>' +
-        '<span class="tt-cell">output ' + fmt(c.o) + '</span></div>';
+        m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
+        '<div class="tt-detail">' +
+        (money
+          ? '<span class="tt-cell">cached $' + (c.c * LUNA.cached / MTOK).toFixed(4) + '</span>' +
+            '<span class="tt-cell">input $' + (c.i * LUNA.input / MTOK).toFixed(4) + '</span>' +
+            '<span class="tt-cell">output $' + (c.o * LUNA.output / MTOK).toFixed(4) + '</span>'
+          : '<span class="tt-cell">cached ' + fmt(c.c) + '</span>' +
+            '<span class="tt-cell">input ' + fmt(c.i) + '</span>' +
+            '<span class="tt-cell">output ' + fmt(c.o) + '</span>') +
+        '</div>';
     }
   } else {
     for (const m of sorted) {
@@ -573,7 +586,7 @@ function render() {
 
   const recs = filterByRange(metric, range);
   const agg = aggregateByDay(recs, metric);
-  const perModel = aggregateByModel(recs, metric);
+  const modelAgg = aggregateByModel(recs, metric);
 
   current = { ...agg, metric, range };
 
@@ -585,7 +598,7 @@ function render() {
       : "no data in range";
 
   renderChart(agg, metric);
-  renderSummary(perModel, metric);
+  renderSummary(modelAgg.perModel, modelAgg.detail, metric);
 }
 
 function renderChart(agg, metric) {
@@ -668,7 +681,7 @@ function renderChart(agg, metric) {
   }
 }
 
-function renderSummary(perModel, metric) {
+function renderSummary(perModel, detail, metric) {
   const list = document.getElementById("modelList");
   const total = models.reduce((a, m) => a + (perModel[m] || 0), 0);
 
@@ -682,15 +695,36 @@ function renderSummary(perModel, metric) {
     const v = perModel[m] || 0;
     const pct = total ? (v / total * 100).toFixed(1) : "0.0";
     const w = maxV ? (v / maxV * 100) : 0;
-    return '<div class="model-row">' +
+    return '<div class="model-row" data-model="' + m + '">' +
       '<div class="model-row-head">' +
-        '<span class="model-name" title="' + m + '">' + m + "</span>" +
+        '<span class="model-name">' + m + "</span>" +
         '<span class="model-value">' + fmtValue(metric, v) + "</span>" +
       "</div>" +
       '<div class="model-bar-track"><div class="model-bar-fill" style="width:' + w + '%;background:' + modelColor[m] + '"></div></div>' +
       '<div class="model-sub">' + pct + "% of total</div>" +
     "</div>";
   }).join("") || '<div class="empty">No data in range</div>';
+
+  // cached / input / output breakdown on hover for tokens & luna
+  const showBreakdown = detail && (metric === "tokens" || metric === "luna");
+  for (const row of list.querySelectorAll(".model-row")) {
+    const m = row.dataset.model;
+    if (showBreakdown) {
+      const c = detail[m] || { c: 0, i: 0, o: 0 };
+      // each sub category on its own line; total is already shown in the row
+      const vals = metric === "luna"
+        ? ["$" + (c.c * LUNA.cached / MTOK).toFixed(4),
+           "$" + (c.i * LUNA.input / MTOK).toFixed(4),
+           "$" + (c.o * LUNA.output / MTOK).toFixed(4)]
+        : [fmt(c.c), fmt(c.i), fmt(c.o)];
+      const grid = ['cached', 'input', 'output'].map((lbl, i) =>
+        '<span class="lbl">' + lbl + '</span><span class="val">' + vals[i] + '</span>'
+      ).join('');
+      wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
+    } else {
+      wireTooltip(row, m, "<span>" + fmtValue(metric, perModel[m] || 0) + "</span>");
+    }
+  }
 
   const gt = document.getElementById("grandTotal");
   gt.hidden = !total;
