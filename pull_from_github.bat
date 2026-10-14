@@ -1,5 +1,7 @@
 :: git clone https://github.com/ggml-org/llama.cpp.git llama.cpp-latest
 cd llama.cpp-latest
+:: Discard any local modifications (e.g. from the patch script) so the pull never conflicts
+git reset --hard
 git fetch
 git pull
 
