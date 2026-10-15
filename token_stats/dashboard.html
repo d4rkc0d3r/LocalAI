@@ -137,7 +137,7 @@
 
   .bar-group {
     flex: 1;
-    min-width: 18px;
+    min-width: 0;   /* wide ranges (30d / yearly) need thin bars, no minimum */
     max-width: 72px;
     height: 100%;
     display: flex;
@@ -176,7 +176,7 @@
   }
   .x-label {
     flex: 1;
-    min-width: 18px;
+    min-width: 0;
     max-width: 72px;
     text-align: center;
     font-size: 10px;
@@ -273,6 +273,11 @@
     </select>
   </div>
   <div class="control-group">
+    <div class="btn-group">
+      <button type="button" id="onlyDataBtn">Only days with data</button>
+    </div>
+  </div>
+  <div class="control-group">
     <label style="margin-right:8px">Metric</label>
     <div class="btn-group" id="metricBtns" role="group" aria-label="Metric">
       <button type="button" class="active" data-metric="tokens">Tokens</button>
@@ -361,6 +366,7 @@ let metric = "tokens";      // currently active metric button
 let speedRecs = [];         // range-filtered records for the selected speed model
 let speedModel = null;        // model selected via the right panel (or dropdown)
 let speedMetric = "output";   // "output" | "prompt" | "cache" | "ot"
+let onlyDataDays = false;     // true: only days that have entries; false: fixed latest X calendar days
 
 /* ---------- helpers ---------- */
 const fmt = n => n.toLocaleString("en-US");
@@ -424,6 +430,35 @@ function shortDay(day) {       // "2026-10-08" -> "Oct 08"
   return months[+m - 1] + " " + d;
 }
 
+function monthName(day) {      // "2026-10-08" -> "Oct"
+  return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+day.slice(5, 7) - 1];
+}
+
+// For yearly range: one slot per available month — the day closest to its 15th
+function monthMidLabels(days) {
+  const best = {};
+  for (const day of days) {
+    const ym = day.slice(0, 7);
+    const dist = Math.abs(+day.slice(8) - 15);
+    const b = best[ym];
+    if (!b || dist < b.dist) best[ym] = { day, dist };
+  }
+  const out = {};
+  for (const ym in best) out[best[ym].day] = monthName(ym + "-01");
+  return out;
+}
+
+// X-axis label text for a day given the active range (wide ranges get thinned):
+// 30d  -> every 3rd day; 365 -> month name only on the mid-month label day
+function dayAxisLabel(day, range, midMap) {
+  if (midMap) return midMap[day] || "";
+  if (range === "30") {
+    const d = +day.slice(8);
+    return d % 3 === 0 ? shortDay(day) : "";
+  }
+  return shortDay(day);
+}
+
 /* ---------- data loading ---------- */
 function parseMarkdown(md) {
   const rows = [];
@@ -470,15 +505,44 @@ async function loadData() {
 }
 
 /* ---------- range / aggregation ---------- */
+function localDay(d) {        // "YYYY-MM-DD" in local time (toISOString would drift across timezones)
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
 function rangeStartDay(range) {
   if (range === "all") return null;
-  const maxDay = records.reduce((a, r) => r.day > a ? r.day : a, "");
-  const d = new Date(maxDay + "T00:00:00");
+  // calendar mode anchors on today
+  const anchor = localDay(new Date());
+  const d = new Date(anchor + "T00:00:00");
   d.setDate(d.getDate() - (parseInt(range, 10) - 1));
-  return d.toISOString().slice(0, 10);
+  return localDay(d);
+}
+
+// "Only days with data" mode: the latest X distinct days that have entries
+function rangeStartDataDay(range) {
+  const days = [...new Set(records.map(r => r.day))].sort();
+  return days[Math.max(0, days.length - parseInt(range, 10))];
+}
+
+// The X calendar days the window covers (ending today), or null when only
+// days that actually have entries should be shown.
+function dayListForRange(range) {
+  if (onlyDataDays || range === "all") return null;
+  const out = [];
+  const end = new Date(localDay(new Date()) + "T00:00:00");
+  for (let i = parseInt(range, 10) - 1; i >= 0; i--) {
+    const d = new Date(end);
+    d.setDate(d.getDate() - i);
+    out.push(localDay(d));
+  }
+  return out;
 }
 
 function filterByRange(range) {
+  if (range !== "all" && onlyDataDays) {
+    const start = rangeStartDataDay(range);
+    return start ? records.filter(r => r.day >= start) : []; // no records at all
+  }
   const start = rangeStartDay(range);
   return records.filter(r => !start || r.day >= start);
 }
@@ -490,7 +554,7 @@ const speedLabel = m => ({ output: "Output tps", prompt: "Prefill tps", cache: "
 function speedTokens(r, m)  { return m === "output" ? r.output : r.input; }
 function speedMs(r, m)      { return m === "output" ? r.outputMs : r.promptMs; }
 
-function aggregateSpeedByDay(recs, m) {
+function aggregateSpeedByDay(recs, m, dayList) {
   const perDay = {};
   const detail = {};
   for (const r of recs) {
@@ -507,6 +571,7 @@ function aggregateSpeedByDay(recs, m) {
     d.cc   += r.cached;            d.ct  += r.cached + r.input;
     d.tms  += r.promptMs + r.outputMs;
   }
+  if (dayList) for (const d of dayList) if (!(d in perDay)) perDay[d] = { tok: 0, ms: 0, cc: 0, ct: 0, os: 0, tms: 0 };
   // values come from the FINAL per-day sums (what the bars draw), so maxTotal
   // always matches the tallest bar — no running-average spikes
   const perVal = {};
@@ -523,7 +588,7 @@ function aggregateSpeedByDay(recs, m) {
   return { days: Object.keys(perVal).sort(), perDay: perVal, maxTotal, detail };
 }
 
-function aggregateByDay(recs, metric) {
+function aggregateByDay(recs, metric, dayList) {
   // returns { days: ["YYYY-MM-DD"...], perDay: { day: { model: value } }, maxTotal, detail }
   // detail keeps raw sums per day+model (cached/input/output, or prefill/output ms
   // for the "time" metric) for the tooltip breakdown
@@ -543,7 +608,14 @@ function aggregateByDay(recs, metric) {
     for (const k in m) tot += m[k];
     if (tot > maxTotal) maxTotal = tot;
   }
-  return { days: Object.keys(perDay).sort(), perDay, maxTotal, detail };
+  if (dayList) for (const d of dayList) if (!(d in perDay)) perDay[d] = {};
+  let days;
+  if (dayList) {
+    days = dayList.slice();
+    for (const d in perDay) if (!days.includes(d)) days.push(d);
+    days.sort();
+  } else days = Object.keys(perDay).sort();
+  return { days, perDay, maxTotal, detail };
 }
 
 function aggregateByModel(recs, metric) {
@@ -685,7 +757,8 @@ function render() {
   uniq.forEach((m, i) => modelColor[m] = colorFor(i));
 
   const recs = filterByRange(range);
-  const agg = aggregateByDay(recs, metric);
+  const dayList = dayListForRange(range);
+  const agg = aggregateByDay(recs, metric, dayList);
   const modelAgg = aggregateByModel(recs, metric);
 
   // keep the selected speed model, but (re)default to the top model in the
@@ -757,13 +830,20 @@ function renderSpeedChart() {
     return;
   }
 
-  const agg = aggregateSpeedByDay(speedRecs, speedMetric);
+  const dayList = dayListForRange(document.getElementById("rangeSel").value);
+  const speedRange = document.getElementById("rangeSel").value;
+  const agg = aggregateSpeedByDay(speedRecs, speedMetric, dayList);
   const { days, perDay, maxTotal, detail: spdDetail } = agg;
+  const speedMidMap = speedRange === "365" ? monthMidLabels(days) : null;
   const isRatio = speedMetric === "cache" || speedMetric === "ot";
   // tps axes: round the max bar up to a clean step (20 for output, 200 for prefill)
   const step = speedMetric === "prompt" ? 200 : 20;
   const top = isRatio ? 100 : Math.max(step, Math.ceil(maxTotal / step) * step);
   const col = modelColor[speedModel] || FALLBACK_COLOR;
+  // same 1px gap for dense (yearly) ranges so 365 bars fit — see renderChart
+  const gap = days.length > 60 ? "1px" : "4px";
+  bars.style.gap = gap;
+  xLabels.style.gap = gap;
 
   const ticks = 5;
   for (let i = ticks; i >= 0; i--) {
@@ -813,7 +893,7 @@ function renderSpeedChart() {
 
     const label = document.createElement("div");
     label.className = "x-label";
-    label.textContent = shortDay(day);
+    label.textContent = dayAxisLabel(day, speedRange, speedMidMap);
 
     group.appendChild(segGroup);
     bars.appendChild(group);
@@ -894,7 +974,16 @@ function renderChart(agg, metric) {
     grid.appendChild(line);
   }
 
+  const range = document.getElementById("rangeSel").value;
+  const midMap = range === "365" ? monthMidLabels(days) : null;
+
   const xLabels = document.getElementById("xLabels");
+  // dense ranges (yearly) get a 1px gap — fixed gaps can't shrink with flex,
+  // and 365 × 4px would overflow the plot on its own
+  const gap = days.length > 60 ? "1px" : "4px";
+  bars.style.gap = gap;
+  xLabels.style.gap = gap;
+
   bars.innerHTML = "";
   xLabels.innerHTML = "";
   if (!days.length) {
@@ -937,7 +1026,7 @@ function renderChart(agg, metric) {
 
     const label = document.createElement("div");
     label.className = "x-label";
-    label.textContent = shortDay(day);
+    label.textContent = dayAxisLabel(day, range, midMap);
 
     group.appendChild(stack);
     bars.appendChild(group);
@@ -1041,6 +1130,16 @@ function selectSpeedModel(m) {
 
 /* ---------- wiring ---------- */
 document.getElementById("rangeSel").addEventListener("change", render);
+
+const onlyDataBtn = document.getElementById("onlyDataBtn");
+wireTooltip(onlyDataBtn, "Only days with data",
+  "On: only show days that have entries.<br>Off (default): show the latest X calendar days — " +
+  "days without entries draw an empty bar.");
+onlyDataBtn.addEventListener("click", () => {
+  onlyDataDays = !onlyDataDays;
+  onlyDataBtn.classList.toggle("active", onlyDataDays);
+  render();
+});
 
 // styled tooltips on metric buttons
 for (const b of document.querySelectorAll("#metricBtns button")) {
