@@ -400,18 +400,19 @@ function fmtValue(m, v) {
   return fmt(v);
 }
 
-function compactValue(m, n) {
+function compactValue(m, n, top) {
   if (isCurrency(m)) return "$" + compactMoney(n);
-  if (m === "time")  return compactHms(n);
+  if (m === "time")  return compactHms(n, top < 5 * 3600000);
   return compact(n);
 }
 
 // Compact duration label for axis ticks: 2h / 45m / 30s
-function compactHms(n) {
+// When the axis top is under 5h, include minutes: 1h 15m / 4h 30m
+function compactHms(n, precise) {
   const s = Math.round(n / 1000);
   const h = Math.floor(s / 3600);
-  if (h > 0) return h + "h";
-  const m = Math.floor(s / 60);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return precise ? h + "h " + m + "m" : h + "h";
   if (m > 0) return m + "m";
   return s + "s";
 }
@@ -1014,6 +1015,11 @@ function renderChart(agg, metric) {
   let top;
   if (metric === "requests") top = Math.max(20, Math.ceil((maxTotal || 1) / 20) * 20);
   else if (metric === "luna") top = Number((Math.ceil((maxTotal || 1) / 0.05) * 0.05).toFixed(2));
+  else if (metric === "time") {
+    // 6 ticks (step = top/5): top = multiple of 25 min so every tick lands
+    // on a 5-minute step
+    top = Math.ceil((maxTotal || 300000) / 1500000) * 1500000;
+  }
   else top = maxTotal || 1;
 
   document.getElementById("chartTitle").textContent = aggTitle() + " " + metricLabel(metric);
@@ -1023,7 +1029,7 @@ function renderChart(agg, metric) {
   yAxis.innerHTML = "";
   for (let i = ticks; i >= 0; i--) {
     const el = document.createElement("div");
-    el.textContent = compactValue(metric, top * i / ticks);
+    el.textContent = compactValue(metric, top * i / ticks, top);
     yAxis.appendChild(el);
   }
 
