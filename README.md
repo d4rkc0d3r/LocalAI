@@ -30,7 +30,8 @@ needs prerequisites:
 
 for first installation clone repo with `git clone https://github.com/ggml-org/llama.cpp.git llama.cpp-latest`  
 then just run `pull_from_github.bat` and then `build.bat`  
-afterwards `bench_models.bat` to check for any speed regressions before copying the files with `test-to-live.bat` to the main `llama.cpp-CUDA` folder for regular use.
+pull script patches the log output with `apply_cached_tokens_patch.py` to mention cached tokens and build script runs `token_stats/test_parser.py` which will use `unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL` for verification that the cache log patch works. if you don't care for the token stats logging you should probably remove these from the scripts.  
+if tests pass copy the files with `test_to_live.bat` to the main `llama.cpp-CUDA` folder for regular use.
 
 ## Using with llama-server
 check `LaunchServer.bat` and `models.ini` to see how to launch the server with the models you want.
@@ -59,7 +60,7 @@ then add the following:
       "contextWindow": 131072,
       "maxOutputTokens": 31072,
       "modelOptions": {
-				"temperature": null
+        "temperature": null
       }
     },
     {
@@ -71,7 +72,7 @@ then add the following:
       "contextWindow": 131072,
       "maxOutputTokens": 31072,
       "modelOptions": {
-				"temperature": null
+        "temperature": null
       }
     }
   ]
@@ -85,7 +86,9 @@ vscode agent sends temp 0.1 with the request unless you specify null like this!
 I tried responses endpoint too but that seems to fail on the second message, so chat completions it is for now.
 
 ## Random Notes
-these are my notes in chronological order. don't assume early entries are still valid.
+these are my notes in mostly chronological order. don't assume early entries are still valid.
+
+---
 
 models get automatically dl'd from hugging face when used with llama-cli or llama-server.
 
@@ -114,7 +117,7 @@ Use `reasoning-preserve = true` for qwen models as they were trained with it on.
 Switch 27B qwen to unsloth IQ4 version since I had a bit of extra VRAM and its bench numbers are better than the GianniDPC pure IQ4 version.
 I did have some trouble downloading it with the bench or server but ended up doing it with a `llama.cpp-test/llama-cli -hf unsloth/Qwen3.6-27B-MTP-GGUF:IQ4_XS -c 10000 -p hi` command.
 
-TODO: check out https://github.com/ggml-org/llama.cpp/pull/23869 for MTP benching
+TODO: check out https://github.com/ggml-org/llama.cpp/pull/23869 for MTP benching (done, see `spec_bench.bat`)
 
 Is there now a mmap for VRAM? I noticed that restarting the server doesn't need to load model from disk anymore if it was loaded before. (b9906)
 
@@ -131,13 +134,20 @@ Trying out muse glimmer 30B as it seems to fit nicely into VRAM even with f16 kv
 
 Trying Ling3 Tiny. its 8B 1.3B active which makes it really cheap to run. light testing shows its surprisingly capable for such a small model. small footprint makes this easily runnable even on 12gb vram cards.
 
-Qwen3.8-27B good. xhigh reasons a lot though but `reasoning-effort = medium` is very much an upgrade over 3.6 that I will happily use. did not encounter any issues with the model struggling to close its thinking. also reasoning is very adaptive. easy tasks the model basically thinks yep imma do the thing end reasoning. but on hard or just long stuff even medium is happy to spend 10k tokens reasoning for good quality.
+Qwen3.8-27B good and fully replaces Qwen3.6-27B from now on. xhigh reasons a lot though but `reasoning-effort = medium` is very much an upgrade over 3.6 that I will happily use. did not encounter any issues with the model struggling to close its thinking. also reasoning is very adaptive. easy tasks the model basically thinks yep imma do the thing end reasoning. but on hard or just long stuff even medium is happy to spend 10k tokens reasoning for good quality.
 
 Tried DFlash2 on Qwen3.8-27B. still not worth it. at q4 its ~1.5gb more vram, even bigger hit on prefill than dflash and wins only in synthetic oor non tool use multiplying of numbers. at q2 acceptance is so bad its just straight up slower. tried with `spec-draft-n-max = 4`
 
 Tried `ngram-mod` with default values added on top of mtp spec decoding. Seems to either not impact speed at all or give massive boosts when copying stuff from previous turns or input. Looks like a small free speedup to me.
 
-Looking forward to more tests for this: https://www.reddit.com/r/LocalLLaMA/comments/1wromzr/adding_logit_penalty_for_wait_maybe_and_perhaps/
+Looking forward to more tests for this: https://www.reddit.com/r/LocalLLaMA/comments/1wromzr/adding_logit_penalty_for_wait_maybe_and_perhaps/  
+Applied it to the daily driver 3.8 medium preset for now.
+
+since I always run some form of spec decode I dont use `bench_models.bat` anymore. added `spec_bench.bat` which uses the built in `speed_bench.py` from llama.cpp instead.
+
+removed `no-mmproj-offload` vision offload to cpu. now models either have gpu vision or none. add a `Qwen3.8-27B-vision` with k cache down to q5_1 to make room for vision embedding in vram. also adjusted Gemma4-31B context down to 25k with vision enabled. its context was too low for agentic use anyways and in web ui chat 25k should be enough.
+
+patch log output in server-context.cpp to mention cached token count and add parser for log to extract per request stats into a simple table. then add html dashboard to visualize stats. also added automatic test added to build script to ensure parsing works correctly after new build.
 
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
