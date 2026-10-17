@@ -3,7 +3,7 @@
 End-to-end test for the token-stats parser, driven by the test server.
 
 Steps:
-  1. Launch LaunchServerTest.bat (llama-server in router mode, port 8000,
+  1. Launch LaunchServerTest.bat (llama-server in router mode, port 8167,
      logging to token_stats/raw_test_server.log) as a background process.
   2. Wait for the server to come up, then send two chat completions to the
      model "Gemma4-12B-Q4-MTP":
@@ -32,7 +32,7 @@ import urllib.request
 # --- configuration ----------------------------------------------------------
 
 MODEL = "Gemma4-12B-Q4-MTP"
-BASE = "http://127.0.0.1:8000"
+BASE = "http://127.0.0.1:8167"
 
 Q1 = "What is 6 + 7? return only the answer number, no formatting."
 Q2 = "now what is 6 * 7? return only the answer number, no formatting."
@@ -89,7 +89,7 @@ def main():
 
         print("[test] waiting for the server to start ...")
         if not wait_for_server(BASE, timeout=30):
-            print("[test] ERROR: server did not become reachable on port 8000")
+            print("[test] ERROR: server did not become reachable on port 8167")
             print(f"[test] server process state: {server.poll()}")
             print(f"[test] last lines of {os.path.basename(out_path)}:")
             print_tail(out_path, n=20)
@@ -315,7 +315,7 @@ def kill_server(server, out_file=None):
     # Force-kill the FULL tree (cmd -> llama-server) while the parent process
     # is still alive. Calling server.terminate() first would kill only cmd;
     # cmd exits before the tree lookup and orphans the still-running
-    # llama-server (keeping port 8000 and the log file open).
+    # llama-server (keeping port 8167 and the log file open).
     try:
         subprocess.run(
             ["taskkill", "/F", "/T", "/PID", str(server.pid)],

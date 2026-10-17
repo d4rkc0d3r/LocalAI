@@ -1,5 +1,5 @@
 llama.cpp-test\llama-server.exe ^
-  --port 8000 ^
+  --port 8167 ^
   --models-preset models.ini ^
   --timeout 600 ^
   --models-max 1 ^
