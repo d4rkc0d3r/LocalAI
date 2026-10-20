@@ -27,7 +27,7 @@
     min-height: 100vh;
   }
 
-  h1 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: baseline; justify-content: space-between; }
   h1 small { color: var(--text-dim); font-weight: 400; font-size: 13px; margin-left: 10px; }
 
   .controls {
@@ -79,7 +79,7 @@
     font-weight: 600;
   }
 
-  #status { color: var(--text-dim); font-size: 13px; margin-left: auto; }
+  #status { color: var(--text-dim); font-size: 13px; font-weight: 400; font-variant-numeric: tabular-nums; }
   #status.error { color: #ff6b6b; }
 
   .main { display: flex; gap: 20px; align-items: stretch; }
@@ -260,7 +260,7 @@
 </head>
 <body>
 
-<h1>Token Stats <small id="subtitle">loading…</small></h1>
+<h1><span>Token Stats <small id="subtitle">loading…</small></span><span id="status"></span></h1>
 
 <div class="controls">
   <div class="control-group">
@@ -291,7 +291,6 @@
       <button type="button" data-metric="luna">Luna equiv. $</button>
     </div>
   </div>
-  <div id="status"></div>
 </div>
 
 <div class="main">
