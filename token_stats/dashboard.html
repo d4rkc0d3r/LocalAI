@@ -286,6 +286,7 @@
       <button type="button" data-metric="requests">Requests</button>
       <button type="button" data-metric="time">Time</button>
       <button type="button" data-metric="luna">Luna equiv. $</button>
+      <button type="button" data-metric="electric">Electricity €</button>
     </div>
   </div>
 </div>
@@ -371,10 +372,15 @@ const fmt = n => n.toLocaleString("en-US");
 
 // Luna pricing, USD per MTok (1e6 tokens)
 const LUNA = { cached: 0.01, input: 0.10, output: 0.50 };
+// Electricity estimate: 300 W while prefilling, 230 W while generating, 0.30 €/kWh
+const PWR = { pref: 300, gen: 230, price: 0.30 };
+function elecCost(pms, oms) {  // €
+  return ((pms * PWR.pref + oms * PWR.gen) / 3.6e9) * PWR.price;
+}
 const MTOK = 1e6;
 
 function metricLabel(m) {
-  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", time: "Time", luna: "Luna equiv. $" }[m];
+  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", time: "Time", luna: "Luna equiv. $", electric: "Electricity €" }[m];
 }
 
 function metricOf(r, m) {
@@ -382,20 +388,22 @@ function metricOf(r, m) {
   if (m === "time") return r.promptMs + r.outputMs;
   if (m === "output") return r.output;
   if (m === "luna") return (r.cached * LUNA.cached + r.input * LUNA.input + r.output * LUNA.output) / MTOK;
+  if (m === "electric") return elecCost(r.promptMs, r.outputMs);
   return r.cached + r.input + r.output;
 }
 
-function isCurrency(m) { return m === "luna"; }
+function isCurrency(m) { return m === "luna" || m === "electric"; }
+function curSym(m) { return m === "electric" ? "€" : "$"; }
 
 // Format a metric value appropriately (currency / time / plain number)
 function fmtValue(m, v) {
-  if (isCurrency(m)) return "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (isCurrency(m)) return curSym(m) + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (m === "time")  return fmtHms(v);
   return fmt(v);
 }
 
 function compactValue(m, n, top) {
-  if (isCurrency(m)) return "$" + compactMoney(n);
+  if (isCurrency(m)) return curSym(m) + compactMoney(n);
   if (m === "time")  return compactHms(n, top < 5 * 3600000);
   return compact(n);
 }
@@ -657,9 +665,9 @@ function aggregateByDay(recs, metric, bucketList) {
     const m = perDay[k] || (perDay[k] = {});
     m[r.model] = (m[r.model] || 0) + v;
     const dm = detail[k] || (detail[k] = {});
-    const dc = dm[r.model] || (dm[r.model] = timeD ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
-    if (timeD) { dc.p += r.promptMs; dc.o += r.outputMs; }
-    else       { dc.c += r.cached; dc.i += r.input; dc.o += r.output; }
+    const dc = dm[r.model] || (dm[r.model] = (timeD || metric === "electric") ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
+    if (timeD || metric === "electric") { dc.p += r.promptMs; dc.o += r.outputMs; }
+    else                                { dc.c += r.cached; dc.i += r.input; dc.o += r.output; }
     let tot = 0;
     for (const bk in m) tot += m[bk];
     if (tot > maxTotal) maxTotal = tot;
@@ -681,9 +689,10 @@ function aggregateByModel(recs, metric) {
   const detail = {};
   for (const r of recs) {
     perModel[r.model] = (perModel[r.model] || 0) + metricOf(r, metric);
-    const d = detail[r.model] || (detail[r.model] = timeM ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
-    if (timeM) { d.p += r.promptMs; d.o += r.outputMs; }
-    else       { d.c += r.cached; d.i += r.input; d.o += r.output; }
+    const eM = metric === "electric";
+    const d = detail[r.model] || (detail[r.model] = (timeM || eM) ? { p: 0, o: 0 } : { c: 0, i: 0, o: 0 });
+    if (timeM || eM) { d.p += r.promptMs; d.o += r.outputMs; }
+    else             { d.c += r.cached; d.i += r.input; d.o += r.output; }
   }
   return { perModel, detail };
 }
@@ -710,7 +719,15 @@ const METRIC_TIPS = {
     '<span class="lbl">cached</span><span class="val">$' + LUNA.cached.toFixed(2) + '</span>' +
     '<span class="lbl">input</span><span class="val">$' + LUNA.input.toFixed(2) + '</span>' +
     '<span class="lbl">output</span><span class="val">$' + LUNA.output.toFixed(2) + '</span>' +
-    '</div>'
+    '</div>',
+  electric:
+    '<div class="tt-text">Rough estimate based on:</div>' +
+    '<div class="tt-grid" style="margin-top:8px">' +
+    '<span class="lbl">prefill draw</span><span class="val">' + PWR.pref + ' W</span>' +
+    '<span class="lbl">output draw</span><span class="val">' + PWR.gen + ' W</span>' +
+    '<span class="lbl">price</span><span class="val">' + PWR.price.toFixed(2) + ' €/kWh</span>' +
+    '</div>' +
+    '<div class="tt-text" style="margin-top:6px">cost = prefill time in seconds × ' + PWR.pref + ' W + output time in seconds × ' + PWR.gen + ' W</div>'
 };
 
 // Bar tooltip: per-model breakdown for one day
@@ -726,23 +743,31 @@ function showBarTooltip(e, day, metric) {
   const sorted = models.slice().sort((a, b) => modelTotals[b] - modelTotals[a]);
   let html = '<div class="tt-title">' + bucketTitle(day) + " — " + metricLabel(metric) + "</div>";
 
-  // Tokens / Luna metrics: split each model's total into cached / input / output
-  if (current.detail && (metric === "tokens" || metric === "luna")) {
-    const money = metric === "luna";
+  // Tokens / Luna / Electricity metrics: split each model's total into
+  // cached / input / output (or prefill / output time for electricity)
+  if (current.detail && (metric === "tokens" || metric === "luna" || metric === "electric")) {
+    const money = metric === "luna" || metric === "electric";
+    const e = metric === "electric";
     const d = current.detail[day] || {};
     for (const m of sorted) {
-      const c = d[m] || { c: 0, i: 0, o: 0 };
+      const c = d[m] || { c: 0, i: 0, o: 0, p: 0, o: 0 };
       html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
         m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
-        '<div class="tt-detail">' +
-        (money
-          ? '<span class="tt-cell">cached $' + (c.c * LUNA.cached / MTOK).toFixed(4) + '</span>' +
-            '<span class="tt-cell">input $' + (c.i * LUNA.input / MTOK).toFixed(4) + '</span>' +
-            '<span class="tt-cell">output $' + (c.o * LUNA.output / MTOK).toFixed(4) + '</span>'
-          : '<span class="tt-cell">cached ' + fmt(c.c) + '</span>' +
-            '<span class="tt-cell">input ' + fmt(c.i) + '</span>' +
-            '<span class="tt-cell">output ' + fmt(c.o) + '</span>') +
-        '</div>';
+        (e
+          // electricity: label left, time+cost right (grid like the per-model tooltip)
+          ? '<div class="tt-grid">' +
+            '<span class="lbl">prefill</span><span class="val">' + fmtHms(c.p) + ' · €' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
+            '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + ' · €' + ((c.o * PWR.gen) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
+            '</div>'
+          : '<div class="tt-detail">' +
+            (money
+              ? '<span class="tt-cell">cached ' + curSym(metric) + (c.c * LUNA.cached / MTOK).toFixed(4) + '</span>' +
+                '<span class="tt-cell">input ' + curSym(metric) + (c.i * LUNA.input / MTOK).toFixed(4) + '</span>' +
+                '<span class="tt-cell">output ' + curSym(metric) + (c.o * LUNA.output / MTOK).toFixed(4) + '</span>'
+              : '<span class="tt-cell">cached ' + fmt(c.c) + '</span>' +
+                '<span class="tt-cell">input ' + fmt(c.i) + '</span>' +
+                '<span class="tt-cell">output ' + fmt(c.o) + '</span>') +
+            '</div>');
     }
   } else if (current.detail && metric === "time") {
     // Time metric: per-model prefill / output / output-% breakdown
@@ -1008,7 +1033,8 @@ function renderChart(agg, metric) {
   // round the axis top up to clean steps: ×20 for requests, ×$0.05 for luna
   let top;
   if (metric === "requests") top = Math.max(20, Math.ceil((maxTotal || 1) / 20) * 20);
-  else if (metric === "luna") top = Number((Math.ceil((maxTotal || 1) / 0.05) * 0.05).toFixed(2));
+  else if (metric === "luna")         top = Number((Math.ceil((maxTotal || 1) / 0.05) * 0.05).toFixed(2));
+  else if (metric === "electric")     top = Number((Math.ceil((maxTotal || 0.0005) / 0.0005) * 0.0005).toFixed(4));
   else if (metric === "time") {
     // 6 ticks (step = top/5): top = multiple of 25 min so every tick lands
     // on a 5-minute step
@@ -1121,19 +1147,28 @@ function renderSummary(perModel, detail, metric) {
     "</div>";
   }).join("") || '<div class="empty">No data in range</div>';
 
-  // cached / input / output breakdown on hover for tokens & luna;
+  // cached / input / output breakdown on hover for tokens & luna & electric;
   // prefill / output / output-% for time
-  const showBreakdown = detail && (metric === "tokens" || metric === "luna" || metric === "time");
+  const showBreakdown = detail && (metric === "tokens" || metric === "luna" || metric === "electric" || metric === "time");
   for (const row of list.querySelectorAll(".model-row")) {
     const m = row.dataset.model;
     if (showBreakdown) {
-      if (metric === "time") {
+      if (metric === "time" || metric === "electric") {
         const c = detail[m] || { p: 0, o: 0 };
-        const share = (c.p + c.o) ? c.o / (c.p + c.o) * 100 : 0;
+        if (metric === "time") {
+          const share = (c.p + c.o) ? c.o / (c.p + c.o) * 100 : 0;
+          const grid =
+            '<span class="lbl">prefill</span><span class="val">' + fmtHms(c.p) + '</span>' +
+            '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + '</span>' +
+            '<span class="lbl">output share</span><span class="val">' + share.toFixed(1) + "%</span>";
+          wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
+          continue;
+        }
         const grid =
           '<span class="lbl">prefill</span><span class="val">' + fmtHms(c.p) + '</span>' +
+          '<span class="lbl">prefill</span><span class="val">€' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
           '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + '</span>' +
-          '<span class="lbl">output share</span><span class="val">' + share.toFixed(1) + "%</span>";
+          '<span class="lbl">output</span><span class="val">€' + ((c.o * PWR.gen) / 3.6e9 * PWR.price).toFixed(4) + '</span>';
         wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
         continue;
       }
