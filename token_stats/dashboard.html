@@ -264,7 +264,6 @@
 
 <div class="controls">
   <div class="control-group">
-    <label for="rangeSel">Range</label>
     <select id="rangeSel">
       <option value="7">Last 7 Days</option>
       <option value="30">Last 30 Days</option>
@@ -273,7 +272,6 @@
     </select>
   </div>
   <div class="control-group">
-    <label for="aggSel">Aggregation</label>
     <select id="aggSel">
       <option value="daily">Daily</option>
       <option value="weekly">Weekly</option>
@@ -282,7 +280,6 @@
     </select>
   </div>
   <div class="control-group">
-    <label style="margin-right:8px">Metric</label>
     <div class="btn-group" id="metricBtns" role="group" aria-label="Metric">
       <button type="button" class="active" data-metric="tokens">Tokens</button>
       <button type="button" data-metric="output">Output</button>
@@ -324,11 +321,9 @@
 <div class="panel chart-panel speed-panel" id="speedPanel">
     <div class="controls" style="margin-bottom:14px">
       <div class="control-group">
-        <label for="speedModelSel">Model</label>
         <select id="speedModelSel"></select>
       </div>
       <div class="control-group">
-        <span style="margin-right:8px;color:var(--text-dim);font-size:13px">Mode</span>
         <div class="btn-group" id="speedBtns" role="group" aria-label="Speed mode">
           <button type="button" class="active" data-speed="output">Output tps</button>
           <button type="button" data-speed="prompt">Prefill tps</button>
@@ -1213,6 +1208,11 @@ document.getElementById("rangeSel").addEventListener("change", () => {
   autoAdjustAgg(document.getElementById("rangeSel").value);
   render();
 });
+
+wireTooltip(document.getElementById("rangeSel"), "Range",
+  "Last 7 Days / Last 30 Days / Last Year: calendar days ending today.<br>" +
+  "Total: everything in the data file.<br>" +
+  '<span style="color:var(--text-dim)">Aggregation is suggested automatically for some ranges; you can switch back at any time.</span>');
 
 const aggSel = document.getElementById("aggSel");
 wireTooltip(aggSel, "Aggregation",
