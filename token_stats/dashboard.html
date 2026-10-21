@@ -236,9 +236,7 @@
   .grand-total b { font-variant-numeric: tabular-nums; }
 
   .cache-line {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
+    margin-top: 8px;
     display: flex;
     justify-content: space-between;
     font-size: 13px;
@@ -266,7 +264,7 @@
   <div class="control-group">
     <select id="rangeSel">
       <option value="7">Last 7 Days</option>
-      <option value="30">Last 30 Days</option>
+      <option value="30" selected>Last 30 Days</option>
       <option value="365">Last Year</option>
       <option value="all">Total</option>
     </select>
@@ -327,7 +325,7 @@
       <div class="control-group">
         <div class="btn-group" id="speedBtns" role="group" aria-label="Speed mode">
           <button type="button" class="active" data-speed="output">Output tps</button>
-          <button type="button" data-speed="prompt">Prefill tps</button>
+          <button type="button" data-speed="prompt">Input tps</button>
           <button type="button" data-speed="cache">Cache Hit %</button>
           <button type="button" data-speed="ot">Output time %</button>
         </div>
@@ -372,7 +370,7 @@ const fmt = n => n.toLocaleString("en-US");
 
 // Luna pricing, USD per MTok (1e6 tokens)
 const LUNA = { cached: 0.01, input: 0.10, output: 0.50 };
-// Electricity estimate: 300 W while prefilling, 230 W while generating, 0.30 €/kWh
+// Electricity estimate: 300 W while processing input, 230 W while generating, 0.30 €/kWh
 const PWR = { pref: 300, gen: 230, price: 0.30 };
 function elecCost(pms, oms) {  // €
   return ((pms * PWR.pref + oms * PWR.gen) / 3.6e9) * PWR.price;
@@ -609,12 +607,21 @@ function filterByRange(range) {
   return records.filter(r => !start || r.day >= start);
 }
 
-const speedLabel = m => ({ output: "Output tps", prompt: "Prefill tps", cache: "Cache Hit %", ot: "Output time %" }[m]);
+const speedLabel = m => ({ output: "Output tps", prompt: "Input tps", cache: "Cache Hit %", ot: "Output time %" }[m]);
 
 // Tokens-per-second: sum tokens and sum ms first, then divide (not an average of per-request tps)
-// Prefill tps counts only non-cached input tokens; output tps counts output tokens.
+// Input tps counts only non-cached input tokens; output tps counts output tokens.
 function speedTokens(r, m)  { return m === "output" ? r.output : r.input; }
 function speedMs(r, m)      { return m === "output" ? r.outputMs : r.promptMs; }
+
+// Cache Hit % bars: color by how good the hit rate is
+function cacheColor(pct) {
+  if (pct > 95) return "#1f8b4c";   // deep green
+  if (pct > 90) return "#63c76d";   // lighter green
+  if (pct > 80) return "#e8c531";   // yellow
+  if (pct > 50) return "#f28b82";   // light red
+  return "#d1242f";                 // deep red
+}
 
 function aggregateSpeedByDay(recs, m, bucketList) {
   const perDay = {};
@@ -653,7 +660,7 @@ function aggregateSpeedByDay(recs, m, bucketList) {
 
 function aggregateByDay(recs, metric, bucketList) {
   // returns { days: [bucketKey...], perDay: { key: { model: value } }, maxTotal, detail }
-  // detail keeps raw sums per bucket+model (cached/input/output, or prefill/output ms
+  // detail keeps raw sums per bucket+model (cached/input/output, or input/output ms
   // for the "time" metric) for the tooltip breakdown
   const timeD = metric === "time";
   const perDay = {};
@@ -684,7 +691,7 @@ function aggregateByDay(recs, metric, bucketList) {
 
 function aggregateByModel(recs, metric) {
   const perModel = {};
-  // per-model raw sums (cached/input/output, or prefill/output ms for "time") for tooltips
+  // per-model raw sums (cached/input/output, or input/output ms for "time") for tooltips
   const timeM = metric === "time";
   const detail = {};
   for (const r of recs) {
@@ -712,7 +719,7 @@ const METRIC_TIPS = {
   tokens:   "cached + input + output tokens",
   output:   "output tokens generated",
   requests: "number of requests",
-  time:     "total prefill + output time",
+  time:     "total input + output time",
   luna:
     '<div class="tt-text">Luna6 price per MTok</div>' +
     '<div class="tt-grid" style="margin-top:8px">' +
@@ -723,11 +730,11 @@ const METRIC_TIPS = {
   electric:
     '<div class="tt-text">Rough estimate based on:</div>' +
     '<div class="tt-grid" style="margin-top:8px">' +
-    '<span class="lbl">prefill draw</span><span class="val">' + PWR.pref + ' W</span>' +
+    '<span class="lbl">input draw</span><span class="val">' + PWR.pref + ' W</span>' +
     '<span class="lbl">output draw</span><span class="val">' + PWR.gen + ' W</span>' +
     '<span class="lbl">price</span><span class="val">' + PWR.price.toFixed(2) + ' €/kWh</span>' +
     '</div>' +
-    '<div class="tt-text" style="margin-top:6px">cost = prefill time in seconds × ' + PWR.pref + ' W + output time in seconds × ' + PWR.gen + ' W</div>'
+    '<div class="tt-text" style="margin-top:6px">cost = input time in seconds × ' + PWR.pref + ' W + output time in seconds × ' + PWR.gen + ' W</div>'
 };
 
 // Bar tooltip: per-model breakdown for one day
@@ -744,7 +751,7 @@ function showBarTooltip(e, day, metric) {
   let html = '<div class="tt-title">' + bucketTitle(day) + " — " + metricLabel(metric) + "</div>";
 
   // Tokens / Luna / Electricity metrics: split each model's total into
-  // cached / input / output (or prefill / output time for electricity)
+  // cached / input / output (or input / output time for electricity)
   if (current.detail && (metric === "tokens" || metric === "luna" || metric === "electric")) {
     const money = metric === "luna" || metric === "electric";
     const e = metric === "electric";
@@ -756,7 +763,7 @@ function showBarTooltip(e, day, metric) {
         (e
           // electricity: label left, time+cost right (grid like the per-model tooltip)
           ? '<div class="tt-grid">' +
-            '<span class="lbl">prefill</span><span class="val">' + fmtHms(c.p) + ' · €' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
+            '<span class="lbl">input</span><span class="val">' + fmtHms(c.p) + ' · €' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
             '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + ' · €' + ((c.o * PWR.gen) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
             '</div>'
           : '<div class="tt-detail">' +
@@ -770,14 +777,14 @@ function showBarTooltip(e, day, metric) {
             '</div>');
     }
   } else if (current.detail && metric === "time") {
-    // Time metric: per-model prefill / output / output-% breakdown
+    // Time metric: per-model input / output / output-% breakdown
     const d = current.detail[day] || {};
     for (const m of sorted) {
       const c = d[m] || { p: 0, o: 0 };
       html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
         m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
         '<div class="tt-detail">' +
-        '<span class="tt-cell">prefill ' + fmtHms(c.p) + '</span>' +
+        '<span class="tt-cell">input ' + fmtHms(c.p) + '</span>' +
         '<span class="tt-cell">output ' + fmtHms(c.o) + '</span>' +
         '<span class="tt-cell">output ' + ((c.p + c.o) ? (c.o / (c.p + c.o) * 100).toFixed(1) : "0.0") + '%</span>' +
         '</div>';
@@ -920,7 +927,7 @@ function renderSpeedChart() {
   const { days, perDay, maxTotal, detail: spdDetail } = agg;
   const speedLabelMap = buildAxisLabels(days);
   const isRatio = speedMetric === "cache" || speedMetric === "ot";
-  // tps axes: round the max bar up to a clean step (20 for output, 200 for prefill)
+  // tps axes: round the max bar up to a clean step (20 for output, 200 for input)
   const step = speedMetric === "prompt" ? 200 : 20;
   const top = isRatio ? 100 : Math.max(step, Math.ceil(maxTotal / step) * step);
   const col = modelColor[speedModel] || FALLBACK_COLOR;
@@ -967,7 +974,7 @@ function renderSpeedChart() {
     const v = perDay[day] || 0;
     const segStack = document.createElement("div");
     segStack.style.height = (v / top * 100) + "%";
-    segStack.style.background = col;
+    segStack.style.background = speedMetric === "cache" ? cacheColor(v) : col;
     segStack.style.width = "100%";
     segGroup.appendChild(segStack);
 
@@ -1005,12 +1012,12 @@ function showSpeedDayTooltip(e, day, m, d) {
     '<div class="tt-title">' + bucketTitle(day) + " — " + speedLabel(m) + "</div>" +
     '<div class="tt-grid">' +
     (m === "cache"
-      ? '<span class="lbl">cached</span><span class="val">' + fmt(p.cc) + '</span>' +
-        '<span class="lbl">cached + input</span><span class="val">' + fmt(p.ct) + '</span>' +
+      ? '<span class="lbl">input</span><span class="val">' + fmt(p.ct - p.cc) + '</span>' +
+        '<span class="lbl">cached</span><span class="val">' + fmt(p.cc) + '</span>' +
         '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span>"
       : m === "ot"
-      ? '<span class="lbl">output time</span><span class="val">' + fmtHms(p.oms) + '</span>' +
-        '<span class="lbl">total time</span><span class="val">' + fmtHms(p.tms) + '</span>' +
+      ? '<span class="lbl">input time</span><span class="val">' + fmtHms(p.pms) + '</span>' +
+        '<span class="lbl">output time</span><span class="val">' + fmtHms(p.oms) + '</span>' +
         '<span class="lbl">output share</span><span class="val">' + otPct.toFixed(1) + "%</span>"
       : m === "output"
       ? '<span class="lbl">tokens</span><span class="val">' + fmt(p.otok) + '</span>' +
@@ -1123,6 +1130,40 @@ function renderChart(agg, metric) {
   }
 }
 
+// Builds the tt-grid breakdown HTML from a detail object
+// ({c,i,o} for tokens & luna, {p,o} for time & electric)
+function breakdownGrid(d, metric) {
+  if (metric === "time" || metric === "electric") {
+    const c = d || { p: 0, o: 0 };
+    if (metric === "time") {
+      const share = (c.p + c.o) ? c.o / (c.p + c.o) * 100 : 0;
+      return '<span class="lbl">input</span><span class="val">' + fmtHms(c.p) + '</span>' +
+        '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + '</span>' +
+        '<span class="lbl">output share</span><span class="val">' + share.toFixed(1) + "%</span>";
+    }
+    return '<span class="lbl">input</span><span class="val">' + fmtHms(c.p) + '</span>' +
+      '<span class="lbl">input</span><span class="val">€' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
+      '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + '</span>' +
+      '<span class="lbl">output</span><span class="val">€' + ((c.o * PWR.gen) / 3.6e9 * PWR.price).toFixed(4) + '</span>';
+  }
+  const c = d || { c: 0, i: 0, o: 0 };
+  const vals = metric === "luna"
+    ? ["$" + (c.c * LUNA.cached / MTOK).toFixed(4),
+       "$" + (c.i * LUNA.input / MTOK).toFixed(4),
+       "$" + (c.o * LUNA.output / MTOK).toFixed(4)]
+    : [fmt(c.c), fmt(c.i), fmt(c.o)];
+  let g = ['cached', 'input', 'output'].map((lbl, i) =>
+    '<span class="lbl">' + lbl + '</span><span class="val">' + vals[i] + '</span>'
+  ).join('');
+  // tokens metric: also show the cache hit rate
+  if (metric === "tokens") {
+    const t = c.c + c.i;
+    const pct = t ? c.c / t * 100 : 0;
+    g += '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span>";
+  }
+  return g;
+}
+
 function renderSummary(perModel, detail, metric) {
   const list = document.getElementById("modelList");
   const total = models.reduce((a, m) => a + (perModel[m] || 0), 0);
@@ -1148,56 +1189,27 @@ function renderSummary(perModel, detail, metric) {
   }).join("") || '<div class="empty">No data in range</div>';
 
   // cached / input / output breakdown on hover for tokens & luna & electric;
-  // prefill / output / output-% for time
-  const showBreakdown = detail && (metric === "tokens" || metric === "luna" || metric === "electric" || metric === "time");
+  // input / output / output-% for time
+  const showBreakdown = !!(detail && (metric === "tokens" || metric === "luna" || metric === "electric" || metric === "time"));
+  // same breakdown on the Total row, summed across all models
+  const sumDetail = showBreakdown ? {} : null;
+  if (showBreakdown) for (const m in detail) for (const k in detail[m]) sumDetail[k] = (sumDetail[k] || 0) + detail[m][k];
   for (const row of list.querySelectorAll(".model-row")) {
     const m = row.dataset.model;
-    if (showBreakdown) {
-      if (metric === "time" || metric === "electric") {
-        const c = detail[m] || { p: 0, o: 0 };
-        if (metric === "time") {
-          const share = (c.p + c.o) ? c.o / (c.p + c.o) * 100 : 0;
-          const grid =
-            '<span class="lbl">prefill</span><span class="val">' + fmtHms(c.p) + '</span>' +
-            '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + '</span>' +
-            '<span class="lbl">output share</span><span class="val">' + share.toFixed(1) + "%</span>";
-          wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
-          continue;
-        }
-        const grid =
-          '<span class="lbl">prefill</span><span class="val">' + fmtHms(c.p) + '</span>' +
-          '<span class="lbl">prefill</span><span class="val">€' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
-          '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + '</span>' +
-          '<span class="lbl">output</span><span class="val">€' + ((c.o * PWR.gen) / 3.6e9 * PWR.price).toFixed(4) + '</span>';
-        wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
-        continue;
-      }
-      const c = detail[m] || { c: 0, i: 0, o: 0 };
-      // each sub category on its own line; total is already shown in the row
-      const vals = metric === "luna"
-        ? ["$" + (c.c * LUNA.cached / MTOK).toFixed(4),
-           "$" + (c.i * LUNA.input / MTOK).toFixed(4),
-           "$" + (c.o * LUNA.output / MTOK).toFixed(4)]
-        : [fmt(c.c), fmt(c.i), fmt(c.o)];
-      let grid = ['cached', 'input', 'output'].map((lbl, i) =>
-        '<span class="lbl">' + lbl + '</span><span class="val">' + vals[i] + '</span>'
-      ).join('');
-      // tokens metric: also show this model's cache hit rate
-      if (metric === "tokens") {
-        const t = c.c + c.i;
-        const pct = t ? c.c / t * 100 : 0;
-        grid += '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span>";
-      }
-      wireTooltip(row, m, '<div class="tt-grid">' + grid + '</div>');
-    } else {
-      wireTooltip(row, m, "<span>" + fmtValue(metric, perModel[m] || 0) + "</span>");
-    }
+    wireTooltip(row, m, showBreakdown
+      ? '<div class="tt-grid">' + breakdownGrid(detail[m], metric) + '</div>'
+      : "<span>" + fmtValue(metric, perModel[m] || 0) + "</span>");
     row.addEventListener("click", () => selectSpeedModel(m));
   }
 
   const gt = document.getElementById("grandTotal");
   gt.hidden = !total;
   document.getElementById("grandValue").textContent = fmtValue(metric, total);
+  if (total) {
+    wireTooltip(gt, "Total", showBreakdown
+      ? '<div class="tt-grid">' + breakdownGrid(sumDetail, metric) + '</div>'
+      : "<span>" + fmtValue(metric, total) + "</span>");
+  }
 }
 
 // Cache Hit % for the whole range (sum cached and cached+input first, then divide).
@@ -1212,8 +1224,8 @@ function renderCacheLine(recs) {
   line.hidden = false;
   document.getElementById("cacheValue").textContent = pct.toFixed(1) + "%";
   wireTooltip(line, "Cache Hit %", '<div class="tt-grid">' +
-    '<span class="lbl">cached tokens</span><span class="val">' + fmt(c) + '</span>' +
-    '<span class="lbl">cached + input</span><span class="val">' + fmt(t) + '</span>' +
+    '<span class="lbl">input</span><span class="val">' + fmt(t - c) + '</span>' +
+    '<span class="lbl">cached</span><span class="val">' + fmt(c) + '</span>' +
     '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span></div>");
 }
 
