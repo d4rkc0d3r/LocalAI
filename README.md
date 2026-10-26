@@ -64,7 +64,7 @@ then add the following:
       }
     },
     {
-      "id": "Gemma4-26B-A4B-Q4-MTP",
+      "id": "Gemma4-26B-A4B",
       "name": "Gemma4 26B",
       "url": "http://localhost:8000/v1/chat/completions",
       "toolCalling": true,

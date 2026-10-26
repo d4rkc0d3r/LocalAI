@@ -6,7 +6,7 @@ Steps:
   1. Launch LaunchServerTest.bat (llama-server in router mode, port 8167,
      logging to token_stats/raw_test_server.log) as a background process.
   2. Wait for the server to come up, then send two chat completions to the
-     model "Gemma4-12B-Q4-MTP":
+     model "Gemma4-12B":
         req 1: "What is 6 + 7? ..."            -> expect 13
         req 2: (req 1 as context) "now what is 6 * 7? ..." -> expect 42
      and verify each answer is correct.
@@ -31,7 +31,7 @@ import urllib.request
 
 # --- configuration ----------------------------------------------------------
 
-MODEL = "Gemma4-12B-Q4-MTP"
+MODEL = "Gemma4-12B"
 BASE = "http://127.0.0.1:8167"
 
 Q1 = "What is 6 + 7? return only the answer number, no formatting."
