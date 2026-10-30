@@ -217,7 +217,6 @@
   .model-row:hover { background: rgba(255,255,255,0.04); }
   .model-row.selected { border-left-color: var(--accent); background: rgba(79,140,255,0.10); }
 
-  .speed-panel { margin-top: 20px; }
   .model-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
   .model-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -287,6 +286,17 @@
       <button type="button" data-metric="electric">Electricity €</button>
     </div>
   </div>
+  <div class="control-group">
+    <div class="btn-group" id="speedBtns" role="group" aria-label="Speed metric">
+      <button type="button" data-speed="output">Output tps</button>
+      <button type="button" data-speed="prompt">Input tps</button>
+      <button type="button" data-speed="cache">Cache Hit %</button>
+      <button type="button" data-speed="ot">Output time %</button>
+    </div>
+  </div>
+  <div class="control-group">
+    <select id="speedModelSel"></select>
+  </div>
 </div>
 
 <div class="main">
@@ -313,33 +323,6 @@
       <span>Cache Hit %</span><b id="cacheValue"></b>
     </div>
   </div>
-
-  </div>
-</div>
-
-<div class="panel chart-panel speed-panel" id="speedPanel">
-    <div class="controls" style="margin-bottom:14px">
-      <div class="control-group">
-        <select id="speedModelSel"></select>
-      </div>
-      <div class="control-group">
-        <div class="btn-group" id="speedBtns" role="group" aria-label="Speed mode">
-          <button type="button" class="active" data-speed="output">Output tps</button>
-          <button type="button" data-speed="prompt">Input tps</button>
-          <button type="button" data-speed="cache">Cache Hit %</button>
-          <button type="button" data-speed="ot">Output time %</button>
-        </div>
-      </div>
-    </div>
-    <div class="chart-area">
-      <div class="y-axis" id="speedYAxis"></div>
-      <div class="bar-region">
-        <div class="plot-wrap">
-          <div class="bars" id="speedBars"></div>
-        </div>
-        <div class="x-labels" id="speedXLabels"></div>
-      </div>
-    </div>
 </div>
 
 <div id="tooltip"></div>
@@ -359,10 +342,8 @@ const FALLBACK_COLOR = "#5c6370";
 let records = [];           // parsed rows: {model, cached, input, output, date}
 let models = [];            // unique model names
 let modelColor = {};        // model -> color
-let metric = "tokens";      // currently active metric button
-let speedRecs = [];         // range-filtered records for the selected speed model
-let speedModel = null;        // model selected via the right panel (or dropdown)
-let speedMetric = "output";   // "output" | "prompt" | "cache" | "ot"
+let metric = "tokens";      // active metric button (either the main or the speed group)
+let speedActive = false;    // true = speed group active (single unified chart)
 let aggMode = "daily";        // "daily" | "weekly" | "monthly" | "entries" (days that have entries)
 
 /* ---------- helpers ---------- */
@@ -376,6 +357,18 @@ function elecCost(pms, oms) {  // €
   return ((pms * PWR.pref + oms * PWR.gen) / 3.6e9) * PWR.price;
 }
 const MTOK = 1e6;
+
+// Speed group = aggregate-over-time metrics (tps / percentages). The main
+// group is stacked per model; the speed group is one flat bar per day and is
+// aggregate over ALL models unless a model is selected in the By Model panel.
+const SPEED_METRICS = new Set(["output", "prompt", "cache", "ot"]);
+const isSpeed = m => SPEED_METRICS.has(m);
+const speedLabel = m => ({ output: "Output tps", prompt: "Input tps", cache: "Cache Hit %", ot: "Output time %" }[m]);
+
+// Model selected in the By Model panel / dropdown (null = all models).
+// Shared across both metric groups: main-group stacks collapse to this model
+// when set; speed curves switch from all-model aggregate to its own.
+let selectedModel = null;
 
 function metricLabel(m) {
   return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", time: "Time", luna: "Luna equiv. $", electric: "Electricity €" }[m];
@@ -607,8 +600,6 @@ function filterByRange(range) {
   return records.filter(r => !start || r.day >= start);
 }
 
-const speedLabel = m => ({ output: "Output tps", prompt: "Input tps", cache: "Cache Hit %", ot: "Output time %" }[m]);
-
 // Tokens-per-second: sum tokens and sum ms first, then divide (not an average of per-request tps)
 // Input tps counts only non-cached input tokens; output tps counts output tokens.
 function speedTokens(r, m)  { return m === "output" ? r.output : r.input; }
@@ -690,6 +681,28 @@ function aggregateByDay(recs, metric, bucketList) {
 }
 
 function aggregateByModel(recs, metric) {
+  // speed group: per-model AVERAGE over the range (sum tokens/ms first, then divide)
+  if (isSpeed(metric)) {
+    const acc = {};
+    for (const r of recs) {
+      const cell = acc[r.model] || (acc[r.model] = { tok: 0, ms: 0, cc: 0, ct: 0, os: 0, tms: 0 });
+      cell.tok += speedTokens(r, metric);
+      cell.ms  += speedMs(r, metric);
+      cell.cc  += r.cached;
+      cell.ct  += r.cached + r.input;
+      cell.os  += r.outputMs;
+      cell.tms += r.promptMs + r.outputMs;
+    }
+    const perModel = {};
+    for (const m in acc) {
+      const c = acc[m];
+      perModel[m] = metric === "cache"  ? (c.ct  ? c.cc / c.ct  * 100 : 0)
+                   : metric === "ot"    ? (c.tms ? c.os / c.tms * 100 : 0)
+                   :                       (c.ms  ? c.tok / c.ms * 1000 : 0);
+    }
+    return { perModel, detail: {} };
+  }
+
   const perModel = {};
   // per-model raw sums (cached/input/output, or input/output ms for "time") for tooltips
   const timeM = metric === "time";
@@ -740,14 +753,16 @@ const METRIC_TIPS = {
 // Bar tooltip: per-model breakdown for one day
 function showBarTooltip(e, day, metric) {
   const perDay = current.perDay[day];
+  // a model selection collapses stacks AND the tooltip to that model
+  const shown = selectedModel ? [selectedModel] : models;
   const modelTotals = {};
   let total = 0;
-  for (const m of models) {
+  for (const m of shown) {
     const v = perDay[m] || 0;
     modelTotals[m] = v;
     total += v;
   }
-  const sorted = models.slice().sort((a, b) => modelTotals[b] - modelTotals[a]);
+  const sorted = shown.slice().sort((a, b) => modelTotals[b] - modelTotals[a]);
   let html = '<div class="tt-title">' + bucketTitle(day) + " — " + metricLabel(metric) + "</div>";
 
   // Tokens / Luna / Electricity metrics: split each model's total into
@@ -846,16 +861,17 @@ function render() {
 
   const recs = filterByRange(range);
   const bucketList = bucketListForRange(range);
-  const agg = aggregateByDay(recs, metric, bucketList);
-  const modelAgg = aggregateByModel(recs, metric);
 
-  // keep the selected speed model, but (re)default to the top model in the
-  // right-panel list when nothing is selected or it's no longer in range
-  if (!speedModel || !modelAgg.perModel[speedModel]) {
-    const top = models.slice()
-      .sort((a, b) => (modelAgg.perModel[b] || 0) - (modelAgg.perModel[a] || 0))[0];
-    speedModel = top && (modelAgg.perModel[top] || 0) > 0 ? top : null;
-  }
+  // speed group: aggregate over all models, or the selected model
+  const speedRecs = selectedModel ? recs.filter(r => r.model === selectedModel) : recs;
+  let agg;
+  if (speedActive) agg = aggregateSpeedByDay(speedRecs, metric, bucketList);
+  else             agg = aggregateByDay(recs, metric, bucketList);
+  const modelAgg = aggregateByModel(recs, metric);   // always all models — the right panel is the selector
+
+  // a stale selection (e.g. range shrank past the model's data) clears itself
+  if (selectedModel && !modelAgg.perModel[selectedModel]) selectedModel = null;
+  syncModelSel();
 
   current = { ...agg, metric };   // range available on demand via rangeSel
 
@@ -870,126 +886,28 @@ function render() {
       ? shortDay(dayKey(minDate)) + " — " + shortDay(dayKey(maxDate)) + "  ·  " + fmt(recs.length) + " requests in range"
       : "no data in range";
 
+  syncControls();
   renderChart(agg, metric);
   renderSummary(modelAgg.perModel, modelAgg.detail, metric);
   renderCacheLine(recs);
-  renderSpeedPanel(recs);
 }
 
-// Rebuilds only the speed section (after a model is picked) without
-// re-running renderSummary() — that would rebuild the right-panel rows
-// and steal focus from the model dropdown.
-function renderSpeedPanel(recs) {
-  speedRecs = speedModel ? recs.filter(r => r.model === speedModel) : [];
-  updateSpeedControls();
-  renderSpeedChart();
+// Keeps the two metric button groups, the model dropdown and the
+// By-Model row highlights in sync with state (called on every render —
+// the buttons themselves still re-render the chart on click).
+function syncControls() {
+  for (const b of document.querySelectorAll("#metricBtns button"))
+    b.classList.toggle("active", !speedActive && b.dataset.metric === metric);
+  for (const b of document.querySelectorAll("#speedBtns button"))
+    b.classList.toggle("active", speedActive && b.dataset.speed === metric);
 }
 
-function updateSpeedControls() {
+// Keeps the model dropdown in the controls bar in sync with selectedModel.
+function syncModelSel() {
   const sel = document.getElementById("speedModelSel");
-  if (sel.value !== (speedModel || "")) sel.value = speedModel || "";
-  for (const b of document.querySelectorAll("#speedBtns button")) {
-    b.classList.toggle("active", b.dataset.speed === speedMetric);
-  }
-}
-
-function renderSpeedChart() {
-  const bars = document.getElementById("speedBars");
-  const yAxis = document.getElementById("speedYAxis");
-  const xLabels = document.getElementById("speedXLabels");
-  const region = bars.parentElement;
-  bars.innerHTML = "";
-  xLabels.innerHTML = "";
-  yAxis.innerHTML = "";
-
-  // sync model dropdown
-  const sel = document.getElementById("speedModelSel");
-  sel.innerHTML = '<option value="">Select a model…</option>' +
+  sel.innerHTML = '<option value="">All models</option>' +
     models.map(m => '<option value="' + m + '">' + m + "</option>").join("");
-  sel.value = speedModel || "";
-
-  // sync which model row is highlighted
-  for (const row of document.querySelectorAll(".model-row")) {
-    row.classList.toggle("selected", row.dataset.model === speedModel);
-  }
-
-  if (!speedModel) {
-    const d = document.createElement("div");
-    d.className = "empty";
-    d.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%";
-    d.textContent = "Click a model on the right (or use the dropdown) to see its performance";
-    bars.appendChild(d);
-    return;
-  }
-
-  const bucketList = bucketListForRange(document.getElementById("rangeSel").value);
-  const agg = aggregateSpeedByDay(speedRecs, speedMetric, bucketList);
-  const { days, perDay, maxTotal, detail: spdDetail } = agg;
-  const speedLabelMap = buildAxisLabels(days);
-  const isRatio = speedMetric === "cache" || speedMetric === "ot";
-  // tps axes: round the max bar up to a clean step (20 for output, 200 for input)
-  const step = speedMetric === "prompt" ? 200 : 20;
-  const top = isRatio ? 100 : Math.max(step, Math.ceil(maxTotal / step) * step);
-  const col = modelColor[speedModel] || FALLBACK_COLOR;
-  // same 1px gap for dense (yearly) ranges so 365 bars fit — see renderChart
-  const gap = days.length > 60 ? "1px" : "4px";
-  bars.style.gap = gap;
-  xLabels.style.gap = gap;
-
-  const ticks = 5;
-  for (let i = ticks; i >= 0; i--) {
-    const el = document.createElement("div");
-    el.textContent = isRatio
-      ? Math.round(top * i / ticks) + "%"
-      : Math.round(top * i / ticks) + " tps";
-    yAxis.appendChild(el);
-  }
-
-  let grid = region.querySelector(".grid-lines");
-  if (!grid) { grid = document.createElement("div"); grid.className = "grid-lines"; region.insertBefore(grid, bars); }
-  grid.innerHTML = "";
-  for (let i = 1; i <= ticks; i++) {
-    const line = document.createElement("div");
-    line.className = "grid-line";
-    line.style.top = ((ticks - i) / ticks * 100) + "%";
-    grid.appendChild(line);
-  }
-
-  if (!days.length) {
-    const d = document.createElement("div");
-    d.className = "empty";
-    d.style.cssText = "display:flex;align-items:center;justify-content:center;width:100%;height:100%";
-    d.textContent = "No data in range";
-    bars.appendChild(d);
-    return;
-  }
-
-  for (const day of days) {
-    const group = document.createElement("div");
-    group.className = "bar-group";
-
-    const segGroup = document.createElement("div");
-    segGroup.className = "bar-seg-group";
-
-    const v = perDay[day] || 0;
-    const segStack = document.createElement("div");
-    segStack.style.height = (v / top * 100) + "%";
-    segStack.style.background = speedMetric === "cache" ? cacheColor(v) : col;
-    segStack.style.width = "100%";
-    segGroup.appendChild(segStack);
-
-    segGroup.addEventListener("mouseenter", e => showSpeedDayTooltip(e, day, speedMetric, spdDetail[day]));
-    segGroup.addEventListener("mousemove", moveTooltip);
-    segGroup.addEventListener("mouseleave", hideTooltip);
-
-    const label = document.createElement("div");
-    label.className = "x-label";
-    label.textContent = speedLabelMap[day] || "";
-
-    group.appendChild(segGroup);
-    bars.appendChild(group);
-    xLabels.appendChild(label);
-  }
+  sel.value = selectedModel || "";
 }
 
 function fmtHms(ms) {
@@ -1002,14 +920,14 @@ function fmtHms(ms) {
   return s + "s";
 }
 
-function showSpeedDayTooltip(e, day, m, d) {
+function showSpeedDayTooltip(e, day, m, d, scope) {
   const p = d || { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0, tms: 0 };
   const pTps = p.pms ? p.ptok / p.pms * 1000 : 0;
   const oTps = p.oms ? p.otok / p.oms * 1000 : 0;
   const pct  = p.ct ? p.cc / p.ct * 100 : 0;
   const otPct = p.tms ? p.oms / p.tms * 100 : 0;
   const html =
-    '<div class="tt-title">' + bucketTitle(day) + " — " + speedLabel(m) + "</div>" +
+    '<div class="tt-title">' + bucketTitle(day) + " — " + speedLabel(m) + (scope ? " · " + scope : "") + "</div>" +
     '<div class="tt-grid">' +
     (m === "cache"
       ? '<span class="lbl">input</span><span class="val">' + fmt(p.ct - p.cc) + '</span>' +
@@ -1033,13 +951,20 @@ function showSpeedDayTooltip(e, day, m, d) {
 }
 
 function renderChart(agg, metric) {
-  const { days, perDay, maxTotal } = agg;
+  const { days, perDay, maxTotal, detail } = agg;
   const bars = document.getElementById("bars");
   const yAxis = document.getElementById("yAxis");
   const region = bars.parentElement;
-  // round the axis top up to clean steps: ×20 for requests, ×$0.05 for luna
+  const speed = isSpeed(metric);
+  // round the axis top up to clean steps: ×20 for requests, ×$0.05 for luna,
+  // tps steps for the speed group (20 out / 200 in), fixed 0–100 for ratios
   let top;
-  if (metric === "requests") top = Math.max(20, Math.ceil((maxTotal || 1) / 20) * 20);
+  if (speed) {
+    const isRatio = metric === "cache" || metric === "ot";
+    const step = metric === "prompt" ? 200 : 20;
+    top = isRatio ? 100 : Math.max(step, Math.ceil((maxTotal || 0) / step) * step);
+  }
+  else if (metric === "requests") top = Math.max(20, Math.ceil((maxTotal || 1) / 20) * 20);
   else if (metric === "luna")         top = Number((Math.ceil((maxTotal || 1) / 0.05) * 0.05).toFixed(2));
   else if (metric === "electric")     top = Number((Math.ceil((maxTotal || 0.0005) / 0.0005) * 0.0005).toFixed(4));
   else if (metric === "time") {
@@ -1049,14 +974,21 @@ function renderChart(agg, metric) {
   }
   else top = maxTotal || 1;
 
-  document.getElementById("chartTitle").textContent = aggTitle() + " " + metricLabel(metric);
+  // speed group is aggregate over all models (or the selected one); a model
+  // selection in the main group collapses the stacks to that model
+  const scope = speed ? (selectedModel || "all models") : (selectedModel || "");
+  document.getElementById("chartTitle").textContent =
+    aggTitle() + " " + (speed ? speedLabel(metric) : metricLabel(metric)) + (scope ? " · " + scope : "");
 
   // y axis ticks (6 labels, top → 0)
   const ticks = 5;
   yAxis.innerHTML = "";
+  const isRatio = metric === "cache" || metric === "ot";
   for (let i = ticks; i >= 0; i--) {
     const el = document.createElement("div");
-    el.textContent = compactValue(metric, top * i / ticks, top);
+    el.textContent = speed
+      ? Math.round(top * i / ticks) + (isRatio ? "%" : " tps")
+      : compactValue(metric, top * i / ticks, top);
     yAxis.appendChild(el);
   }
 
@@ -1091,40 +1023,62 @@ function renderChart(agg, metric) {
     return;
   }
 
+  // flat speed bars: the selected model's color, or the accent for all models
+  const speedCol = selectedModel
+    ? (modelColor[selectedModel] || FALLBACK_COLOR)
+    : "var(--accent)";
+
   for (const day of days) {
     const group = document.createElement("div");
     group.className = "bar-group";
 
-    const stack = document.createElement("div");
-    stack.className = "bar-stack";
+    if (speed) {
+      // one flat bar per day; colored by cache rate in Cache Hit % mode
+      const segGroup = document.createElement("div");
+      segGroup.className = "bar-seg-group";
+      const v = perDay[day] || 0;
+      const segStack = document.createElement("div");
+      segStack.style.height = (v / top * 100) + "%";
+      segStack.style.background = metric === "cache" ? cacheColor(v) : speedCol;
+      segStack.style.width = "100%";
+      segGroup.appendChild(segStack);
+      segGroup.addEventListener("mouseenter", e => showSpeedDayTooltip(e, day, metric, detail && detail[day], scope));
+      segGroup.addEventListener("mousemove", moveTooltip);
+      segGroup.addEventListener("mouseleave", hideTooltip);
+      group.appendChild(segGroup);
+    } else {
+      // stacked per model (or just the selected model when one is picked)
+      const stack = document.createElement("div");
+      stack.className = "bar-stack";
 
-    let total = 0;
-    for (const m of models) {
-      const v = perDay[day][m] || 0;
-      if (!v) continue;
-      total += v;
-      const seg = document.createElement("div");
-      seg.className = "bar-seg";
-      seg.style.height = (v / top * 100) + "%";
-      seg.style.background = modelColor[m];
-      stack.appendChild(seg);
-    }
-    if (total === 0) {
-      const seg = document.createElement("div");
-      seg.className = "bar-seg";
-      seg.style.height = "0%";
-      stack.appendChild(seg);
-    }
+      let total = 0;
+      for (const m of (selectedModel ? [selectedModel] : models)) {
+        const v = perDay[day][m] || 0;
+        if (!v) continue;
+        total += v;
+        const seg = document.createElement("div");
+        seg.className = "bar-seg";
+        seg.style.height = (v / top * 100) + "%";
+        seg.style.background = modelColor[m];
+        stack.appendChild(seg);
+      }
+      if (total === 0) {
+        const seg = document.createElement("div");
+        seg.className = "bar-seg";
+        seg.style.height = "0%";
+        stack.appendChild(seg);
+      }
 
-    stack.addEventListener("mouseenter", e => showBarTooltip(e, day, metric));
-    stack.addEventListener("mousemove", moveTooltip);
-    stack.addEventListener("mouseleave", hideTooltip);
+      stack.addEventListener("mouseenter", e => showBarTooltip(e, day, metric));
+      stack.addEventListener("mousemove", moveTooltip);
+      stack.addEventListener("mouseleave", hideTooltip);
+      group.appendChild(stack);
+    }
 
     const label = document.createElement("div");
     label.className = "x-label";
     label.textContent = labelMap[day] || "";
 
-    group.appendChild(stack);
     bars.appendChild(group);
     xLabels.appendChild(label);
   }
@@ -1169,7 +1123,7 @@ function renderSummary(perModel, detail, metric) {
   const total = models.reduce((a, m) => a + (perModel[m] || 0), 0);
 
   document.getElementById("summaryTitle").textContent =
-    metricLabel(metric) + " by model";
+    (isSpeed(metric) ? speedLabel(metric) : metricLabel(metric)) + " by model";
 
   const sorted = models.slice().sort((a, b) => (perModel[b] || 0) - (perModel[a] || 0));
   const maxV = sorted.length ? (perModel[sorted[0]] || 0) : 0;
@@ -1196,10 +1150,13 @@ function renderSummary(perModel, detail, metric) {
   if (showBreakdown) for (const m in detail) for (const k in detail[m]) sumDetail[k] = (sumDetail[k] || 0) + detail[m][k];
   for (const row of list.querySelectorAll(".model-row")) {
     const m = row.dataset.model;
+    row.classList.toggle("selected", m === selectedModel);
     wireTooltip(row, m, showBreakdown
       ? '<div class="tt-grid">' + breakdownGrid(detail[m], metric) + '</div>'
       : "<span>" + fmtValue(metric, perModel[m] || 0) + "</span>");
-    row.addEventListener("click", () => selectSpeedModel(m));
+    // selecting a model applies to BOTH metric groups; clicking the
+    // selected row again switches back to all models
+    row.addEventListener("click", () => toggleModelSelected(m));
   }
 
   const gt = document.getElementById("grandTotal");
@@ -1229,13 +1186,11 @@ function renderCacheLine(recs) {
     '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span></div>");
 }
 
-// Picking a model (by clicking its row, or via the dropdown) re-renders
-// only the speed section, not the summary — see renderSpeedPanel().
-function selectSpeedModel(m) {
-  speedModel = m;
-  const sel = document.getElementById("speedModelSel");
-  if (sel.value !== m) sel.value = m;
-  renderSpeedPanel(filterByRange(document.getElementById("rangeSel").value));
+// Clicking a model row selects it for both charts; clicking the selected
+// row again (or picking “All models” in the dropdown) clears the selection.
+function toggleModelSelected(m) {
+  selectedModel = selectedModel === m ? null : m;
+  render();
 }
 
 /* ---------- wiring ---------- */
@@ -1293,27 +1248,27 @@ if (otSpeedBtn) {
   wireTooltip(otSpeedBtn, "Output time %", "output time / total time<br>summed per group before dividing");
 }
 
+// The two button groups are mutually exclusive: whichever is pressed owns
+// the single chart, stored in the shared `metric` state.
 document.getElementById("metricBtns").addEventListener("click", e => {
   const btn = e.target.closest("button[data-metric]");
-  if (!btn || btn.classList.contains("active")) return;
-  for (const b of document.querySelectorAll("#metricBtns button")) b.classList.remove("active");
-  btn.classList.add("active");
+  if (!btn || (!speedActive && btn.dataset.metric === metric)) return;
+  speedActive = false;
   metric = btn.dataset.metric;
   render();
 });
 
-document.getElementById("speedModelSel").addEventListener("change", e => {
-  speedModel = e.target.value || null;
-  renderSpeedPanel(filterByRange(document.getElementById("rangeSel").value));
-});
-
 document.getElementById("speedBtns").addEventListener("click", e => {
   const btn = e.target.closest("button[data-speed]");
-  if (!btn || btn.classList.contains("active")) return;
-  for (const b of document.querySelectorAll("#speedBtns button")) b.classList.remove("active");
-  btn.classList.add("active");
-  speedMetric = btn.dataset.speed;
-  renderSpeedPanel(filterByRange(document.getElementById("rangeSel").value));
+  if (!btn || (speedActive && btn.dataset.speed === metric)) return;
+  speedActive = true;
+  metric = btn.dataset.speed;
+  render();
+});
+
+document.getElementById("speedModelSel").addEventListener("change", e => {
+  selectedModel = e.target.value || null;
+  render();
 });
 
 loadData();
