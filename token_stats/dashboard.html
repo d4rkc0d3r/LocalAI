@@ -279,7 +279,7 @@
   <div class="control-group">
     <div class="btn-group" id="metricBtns" role="group" aria-label="Metric">
       <button type="button" class="active" data-metric="tokens">Tokens</button>
-      <button type="button" data-metric="output">Output</button>
+      <button type="button" data-metric="outputs">Output</button>
       <button type="button" data-metric="requests">Requests</button>
       <button type="button" data-metric="time">Time</button>
       <button type="button" data-metric="luna">Luna equiv. $</button>
@@ -371,13 +371,13 @@ const speedLabel = m => ({ output: "Output tps", prompt: "Input tps", cache: "Ca
 let selectedModel = null;
 
 function metricLabel(m) {
-  return { tokens: "Tokens", output: "Output Tokens", requests: "Requests", time: "Time", luna: "Luna equiv. $", electric: "Electricity €" }[m];
+  return { tokens: "Tokens", outputs: "Output Tokens", requests: "Requests", time: "Time", luna: "Luna equiv. $", electric: "Electricity €" }[m];
 }
 
 function metricOf(r, m) {
   if (m === "requests") return 1;
   if (m === "time") return r.promptMs + r.outputMs;
-  if (m === "output") return r.output;
+  if (m === "outputs") return r.output;
   if (m === "luna") return (r.cached * LUNA.cached + r.input * LUNA.input + r.output * LUNA.output) / MTOK;
   if (m === "electric") return elecCost(r.promptMs, r.outputMs);
   return r.cached + r.input + r.output;
@@ -730,7 +730,7 @@ const tooltip = document.getElementById("tooltip");
 
 const METRIC_TIPS = {
   tokens:   "cached + input + output tokens",
-  output:   "output tokens generated",
+  outputs:  "output tokens generated",
   requests: "number of requests",
   time:     "total input + output time",
   luna:
