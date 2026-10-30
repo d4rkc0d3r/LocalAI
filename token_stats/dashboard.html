@@ -105,6 +105,9 @@
     text-align: right;
     font-size: 11px;
     color: var(--text-dim);
+    /* fixed width so the plot doesn't shift when label lengths change between metrics */
+    width: 56px;
+    flex-shrink: 0;
     padding-right: 8px;
     padding-bottom: 26px; /* align with plot height (leaves room for x labels) */
   }
@@ -1045,10 +1048,11 @@ function renderChart(agg, metric) {
     return;
   }
 
-  // flat speed bars: the selected model's color, or the accent for all models
+  // flat speed bars: the selected model's color, or a neutral light gray
+  // for the all-models aggregate (a model color would be misleading)
   const speedCol = selectedModel
     ? (modelColor[selectedModel] || FALLBACK_COLOR)
-    : "var(--accent)";
+    : "#a4aeba";
 
   for (const day of days) {
     const group = document.createElement("div");
