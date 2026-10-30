@@ -633,11 +633,12 @@ function aggregateSpeedByDay(recs, m, bucketList) {
     cell.ct  += r.cached + r.input;
     cell.os  += r.outputMs;
     cell.tms += r.promptMs + r.outputMs;
-    const d = detail[k] || (detail[k] = { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0, tms: 0 });
+    const d = detail[k] || (detail[k] = { ptok: 0, pms: 0, otok: 0, oms: 0, cc: 0, ct: 0, tms: 0, models: {} });
     d.ptok += r.input;             d.pms += r.promptMs;
     d.otok += r.output;            d.oms += r.outputMs;
     d.cc   += r.cached;            d.ct  += r.cached + r.input;
     d.tms  += r.promptMs + r.outputMs;
+    d.models[r.model] = 1;         // which models contribute to this bucket
   }
   if (bucketList) for (const d of bucketList) if (!(d in perDay)) perDay[d] = { tok: 0, ms: 0, cc: 0, ct: 0, os: 0, tms: 0 };
   // values come from the FINAL per-day sums (what the bars draw), so maxTotal
@@ -1059,13 +1060,20 @@ function renderChart(agg, metric) {
     group.className = "bar-group";
 
     if (speed) {
-      // one flat bar per day; colored by cache rate in Cache Hit % mode
+      // one flat bar per day; colored by cache rate in Cache Hit % mode.
+      // All-models aggregate: if only a single model contributed to the bar,
+      // tint it with that model's color; mixed bars stay neutral gray.
       const segGroup = document.createElement("div");
       segGroup.className = "bar-seg-group";
       const v = perDay[day] || 0;
+      let bg = metric === "cache" ? cacheColor(v) : speedCol;
+      if (metric !== "cache" && !selectedModel && detail && detail[day]) {
+        const contrib = Object.keys(detail[day].models || {});
+        if (contrib.length === 1) bg = modelColor[contrib[0]] || FALLBACK_COLOR;
+      }
       const segStack = document.createElement("div");
       segStack.style.height = (v / top * 100) + "%";
-      segStack.style.background = metric === "cache" ? cacheColor(v) : speedCol;
+      segStack.style.background = bg;
       segStack.style.width = "100%";
       segGroup.appendChild(segStack);
       segGroup.addEventListener("mouseenter", e => showSpeedDayTooltip(e, day, metric, detail && detail[day], scope));
