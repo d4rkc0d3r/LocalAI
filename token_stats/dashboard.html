@@ -390,6 +390,10 @@ function curSym(m) { return m === "electric" ? "€" : "$"; }
 function fmtValue(m, v) {
   if (isCurrency(m)) return curSym(m) + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (m === "time")  return fmtHms(v);
+  // speed averages: 1 decimal for tps/% (input tps rounded to whole)
+  if (isSpeed(m)) return m === "prompt" ? Math.round(v) + " tps"
+                    : m === "cache" || m === "ot" ? v.toFixed(1) + "%"
+                    : v.toFixed(1) + " tps";
   return fmt(v);
 }
 
