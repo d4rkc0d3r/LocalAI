@@ -391,7 +391,7 @@ function fmtValue(m, v) {
   if (isCurrency(m)) return curSym(m) + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (m === "time")  return fmtHms(v);
   // speed averages: 1 decimal for tps/% (input tps rounded to whole)
-  if (isSpeed(m)) return m === "prompt" ? Math.round(v) + " tps"
+  if (isSpeed(m)) return m === "prompt" ? fmt(Math.round(v)) + " tps"
                     : m === "cache" || m === "ot" ? v.toFixed(1) + "%"
                     : v.toFixed(1) + " tps";
   return fmt(v);
@@ -873,6 +873,24 @@ function render() {
   else             agg = aggregateByDay(recs, metric, bucketList);
   const modelAgg = aggregateByModel(recs, metric);   // always all models — the right panel is the selector
 
+  // speed group: the Total row must aggregate the raw entries (sum tokens /
+  // sum ms, sum cached / sum input, …) — NOT sum the per-model averages
+  let speedTotal = null;
+  if (speedActive) {
+    let tok = 0, ms = 0, cc = 0, ct = 0, os = 0, tms = 0;
+    for (const r of speedRecs) {
+      tok += speedTokens(r, metric);
+      ms  += speedMs(r, metric);
+      cc  += r.cached;
+      ct  += r.cached + r.input;
+      os  += r.outputMs;
+      tms += r.promptMs + r.outputMs;
+    }
+    speedTotal = metric === "cache"  ? (ct  ? cc / ct  * 100 : 0)
+               : metric === "ot"    ? (tms ? os / tms * 100 : 0)
+               :                       (ms  ? tok / ms * 1000 : 0);
+  }
+
   // a stale selection (e.g. range shrank past the model's data) clears itself
   if (selectedModel && !modelAgg.perModel[selectedModel]) selectedModel = null;
   syncModelSel();
@@ -892,7 +910,7 @@ function render() {
 
   syncControls();
   renderChart(agg, metric);
-  renderSummary(modelAgg.perModel, modelAgg.detail, metric);
+  renderSummary(modelAgg.perModel, modelAgg.detail, metric, speedTotal);
   renderCacheLine(recs);
 }
 
@@ -1122,9 +1140,13 @@ function breakdownGrid(d, metric) {
   return g;
 }
 
-function renderSummary(perModel, detail, metric) {
+function renderSummary(perModel, detail, metric, speedTotal) {
   const list = document.getElementById("modelList");
-  const total = models.reduce((a, m) => a + (perModel[m] || 0), 0);
+  // speed group: total arrives pre-aggregated over the raw entries (render());
+  // main group: plain sum of the per-model values
+  const total = isSpeed(metric) && speedTotal !== null
+    ? speedTotal
+    : models.reduce((a, m) => a + (perModel[m] || 0), 0);
 
   document.getElementById("summaryTitle").textContent =
     (isSpeed(metric) ? speedLabel(metric) : metricLabel(metric)) + " by model";
@@ -1142,7 +1164,9 @@ function renderSummary(perModel, detail, metric) {
         '<span class="model-value">' + fmtValue(metric, v) + "</span>" +
       "</div>" +
       '<div class="model-bar-track"><div class="model-bar-fill" style="width:' + w + '%;background:' + modelColor[m] + '"></div></div>' +
-      '<div class="model-sub">' + pct + "% of total</div>" +
+      (isSpeed(metric)
+        ? '<div class="model-sub">&nbsp;</div>'   // "…% of total" is meaningless for averages
+        : '<div class="model-sub">' + pct + "% of total</div>") +
     "</div>";
   }).join("") || '<div class="empty">No data in range</div>';
 
