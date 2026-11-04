@@ -874,7 +874,10 @@ function render() {
   const speedRecs = selectedModel ? recs.filter(r => r.model === selectedModel) : recs;
   let agg;
   if (speedActive) agg = aggregateSpeedByDay(speedRecs, metric, bucketList);
-  else             agg = aggregateByDay(recs, metric, bucketList);
+  // main group: with a model selected, rescale the chart to that model only
+  else agg = aggregateByDay(
+    selectedModel ? recs.filter(r => r.model === selectedModel) : recs,
+    metric, bucketList);
   const modelAgg = aggregateByModel(recs, metric);   // always all models — the right panel is the selector
 
   // speed group: the Total row must aggregate the raw entries (sum tokens /
