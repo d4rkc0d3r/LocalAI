@@ -14,4 +14,4 @@ Task:
 - Group the changes by relevance.
 - For each commit give the short hash, the title, and one line on why it matters to my setup.
 - Format any PR numbers like #25635 as clickable links to their pull request, e.g. [#25635](https://github.com/ggml-org/llama.cpp/pull/25635).
-- Ignore changes for backends, models or features I do not use (Metal, SYCL, OpenCL, Hexagon, WebGPU, UI, CI).
+- Ignore changes for backends, models or features I do not use (Metal, SYCL, OpenCL, Hexagon, WebGPU, CI, NVFP4, ...).
