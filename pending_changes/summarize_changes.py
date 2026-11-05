@@ -9,6 +9,23 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
+
+def check_server(server_url, model):
+    """Ping /v1/models to verify the server is up and the model is available."""
+    try:
+        with urllib.request.urlopen(server_url + "/v1/models", timeout=5) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        print(f"ERROR: cannot reach server at {server_url}: {e}", file=sys.stderr)
+        return False
+    ids = [m.get("id", "") for m in data.get("data", [])]
+    print(f"Server models: {', '.join(ids) if ids else '(none)'}")
+    if model not in ids:
+        print(f"ERROR: model '{model}' not in server model list", file=sys.stderr)
+        return False
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="Summarize upstream llama.cpp changes via local LLM server")
     parser.add_argument("--server-url", required=True, help="Base URL of the llama.cpp server (no trailing /)")
@@ -19,6 +36,10 @@ def main():
 
     server_url = args.server_url.rstrip("/")
     base_dir = Path(args.dir)
+
+    # Fail fast if the server is down or the model is missing
+    if not check_server(server_url, args.model):
+        sys.exit(1)
 
     # Files to include in the prompt context
     files = [
@@ -62,7 +83,7 @@ def main():
     body = {
         "model": args.model,
         "stream": False,
-        "max_tokens": 16384,
+        "max_tokens": 32768,
         "messages": [
             {"role": "user", "content": prompt_content}
         ],

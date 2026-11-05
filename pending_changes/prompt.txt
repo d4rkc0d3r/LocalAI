@@ -13,5 +13,11 @@ Task:
 - Write a concise markdown summary of the changes I am likely to be interested in.
 - Group the changes by relevance.
 - For each commit give the short hash, the title, and one line on why it matters to my setup.
+- Some commits have no usable commit message (only the title and author, no body text).
+  In that case, in the "why it matters" line state that there is no commit message and your
+  judgment is based on the title alone. Do not invent details or make up a reason.
+- The title is usually enough to filter commits by relevance, but without a body you cannot
+  be sure it is directly relevant to my exact setup - lower their confidence accordingly
+  (e.g. put them in a separate "relevant by title only, no commit message" group).
 - Format any PR numbers like #25635 as clickable links to their pull request, e.g. [#25635](https://github.com/ggml-org/llama.cpp/pull/25635).
 - Ignore changes for backends, models or features I do not use (Metal, SYCL, OpenCL, Hexagon, WebGPU, CI, NVFP4, ...).

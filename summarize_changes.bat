@@ -31,11 +31,7 @@ echo.
 
 echo Step 2/3: Building request and querying the server...
 python "%WORKFLOW_DIR%\summarize_changes.py" --server-url "%SERVER_URL%" --model "%MODEL%" --output "%OUTPUT_FILE%" --dir "%WORKFLOW_DIR%"
-
-if errorlevel 1 (
-    echo ERROR: request failed. Is the server running with the %MODEL% model loaded?
-    exit /b 1
-)
+if errorlevel 1 exit /b 1
 
 echo Step 3/3: Done.
 endlocal
