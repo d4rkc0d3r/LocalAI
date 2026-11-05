@@ -760,9 +760,11 @@ const METRIC_TIPS = {
 
 // Bar tooltip: per-model breakdown for one day
 function showBarTooltip(e, day, metric) {
-  const perDay = current.perDay[day];
-  // a model selection collapses stacks AND the tooltip to that model
-  const shown = selectedModel ? [selectedModel] : models;
+  const perDay = current.perDay[day] || {};
+  // a model selection collapses stacks AND the tooltip to that model;
+  // also drop models that have no requests in this particular bucket
+  const inBucket = m => perDay[m] !== undefined;
+  const shown = (selectedModel ? [selectedModel] : models).filter(inBucket);
   const modelTotals = {};
   let total = 0;
   for (const m of shown) {
