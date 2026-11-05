@@ -1,0 +1,17 @@
+You are helping me review the newly fetched upstream llama.cpp changes.
+
+Context:
+- I maintain a personal Windows + CUDA setup.
+- My notes (README.md), server args (LaunchServer.bat) and model list (models.ini) are appended below.
+- The raw change list (changes_raw_commits.md) is also appended below.
+
+My setup:
+- Hardware: single RTX 4090 24GB, ~20GB usable VRAM, 32GB RAM.
+- Models/flags I actually use: CUDA backend, MTP, DFlash, KV cache quant, large context, single parallel slot.
+
+Task:
+- Write a concise markdown summary of the changes I am likely to be interested in.
+- Group the changes by relevance.
+- For each commit give the short hash, the title, and one line on why it matters to my setup.
+- Format any PR numbers like #25635 as clickable links to their pull request, e.g. [#25635](https://github.com/ggml-org/llama.cpp/pull/25635).
+- Ignore changes for backends, models or features I do not use (Metal, SYCL, OpenCL, Hexagon, WebGPU, UI, CI).
