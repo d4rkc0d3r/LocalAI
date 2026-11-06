@@ -79,6 +79,26 @@
     font-weight: 600;
   }
 
+  .toggle-btn {
+    background: var(--bg-inset);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .toggle-btn:hover { color: var(--text); }
+  .toggle-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
   #status { color: var(--text-dim); font-size: 13px; font-weight: 400; font-variant-numeric: tabular-nums; }
   #status.error { color: #ff6b6b; }
 
@@ -307,6 +327,9 @@
     </div>
   </div>
   <div class="control-group">
+    <button type="button" id="groupBtn" class="toggle-btn" title="Pool model variants (-xhigh, -high, -medium, -low, -vision) that share a base name into one entry">Group variants</button>
+  </div>
+  <div class="control-group">
     <select id="speedModelSel"></select>
   </div>
 </div>
@@ -381,6 +404,14 @@ const speedLabel = m => ({ output: "Output tps", prompt: "Input tps", cache: "Ca
 // Shared across both metric groups: main-group stacks collapse to this model
 // when set; speed curves switch from all-model aggregate to its own.
 let selectedModel = null;
+
+// "Group variants" toggle: when on, model names ending in one of these
+// suffixes are pooled together under their shared base name (e.g.
+// "X-xhigh" + "X-high" + "X-medium" + "X-low" + "X-vision" -> "X").
+// Off = raw names, one entry per variant.
+let groupModels = false;
+const GROUP_SUFFIX_RE = /-(xhigh|high|medium|low|vision)$/;
+function modelKey(name) { return GROUP_SUFFIX_RE.test(name) ? name.replace(GROUP_SUFFIX_RE, "") : name; }
 
 function metricLabel(m) {
   return { tokens: "Tokens", outputs: "Output Tokens", requests: "Requests", time: "Time", luna: "Luna equiv. $", electric: "Electricity €" }[m];
@@ -881,8 +912,21 @@ function colorFor(i) {
 function render() {
   const range = document.getElementById("rangeSel").value;
 
-  models = records.map(r => r.model);
-  const uniq = [...new Set(models)];
+    // variant grouping: pool records of e.g. "X-xhigh" / "X-high" / "X-vision"
+    // under their base name so every aggregation below treats them as one model.
+    // Names are restored before render() returns.
+    const origModels = records.map(r => r.model);
+    if (groupModels) records.forEach((r, i) => { r.model = modelKey(origModels[i]); });
+
+    // re-map the current selection to its group key so toggling the button
+    // doesn't silently drop a selection; clear it if nothing matches
+    if (selectedModel && !records.some(r => r.model === selectedModel)) {
+      const k = modelKey(selectedModel);
+      selectedModel = records.some(r => r.model === k) ? k : null;
+    }
+
+    models = records.map(r => r.model);
+    const uniq = [...new Set(models)];
   models = uniq;
   modelColor = {};
   uniq.forEach((m, i) => modelColor[m] = colorFor(i));
@@ -939,6 +983,9 @@ function render() {
   renderChart(agg, metric);
   renderSummary(modelAgg.perModel, modelAgg.detail, metric, speedTotal);
   renderCacheLine(recs);
+
+  // restore raw model names for the next render
+  records.forEach((r, i) => { r.model = origModels[i]; });
 }
 
 // Keeps the two metric button groups, the model dropdown and the
@@ -1331,6 +1378,12 @@ document.getElementById("speedBtns").addEventListener("click", e => {
 
 document.getElementById("speedModelSel").addEventListener("change", e => {
   selectedModel = e.target.value || null;
+  render();
+});
+
+document.getElementById("groupBtn").addEventListener("click", e => {
+  groupModels = !groupModels;
+  e.currentTarget.classList.toggle("active", groupModels);
   render();
 });
 
