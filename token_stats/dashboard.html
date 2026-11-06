@@ -194,6 +194,8 @@
   #tooltip {
     position: fixed;
     display: none;
+    flex-direction: column;
+    align-items: flex-end;
     background: #232838;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -202,14 +204,21 @@
     pointer-events: none;
     z-index: 10;
     box-shadow: 0 6px 20px rgba(0,0,0,.5);
-    max-width: 280px;
+    max-width: 360px;
   }
   #tooltip .tt-title { font-weight: 600; margin-bottom: 6px; }
   #tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; margin-top: 3px; }
   #tooltip .tt-row span:first-child { color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
   #tooltip .tt-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
   #tooltip .tt-total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 5px; font-weight: 600; }
-  #tooltip .tt-detail { display: flex; justify-content: flex-end; gap: 10px; font-size: 11px; color: var(--text-dim); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  #tooltip .tt-detail { display: grid; justify-content: end; column-gap: 10px; row-gap: 2px; font-size: 11px; color: var(--text-dim); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  #tooltip .tt-detail.d2 { grid-template-columns: min-content min-content; }
+  #tooltip .tt-detail.d3 { grid-template-columns: min-content min-content min-content; }
+  #tooltip .tt-detail .tt-name { grid-column: 1 / -1; margin-top: 3px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); white-space: nowrap; }
+  #tooltip .tt-detail .tt-name .tt-model-total { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #tooltip .tt-detail .tt-cell { display: flex; align-items: baseline; gap: 6px; width: 100%; white-space: nowrap; }
+  #tooltip .tt-detail .lbl { color: var(--text-dim); }
+  #tooltip .tt-detail .num { font-variant-numeric: tabular-nums; color: var(--text); margin-left: auto; }
   #tooltip .tt-grid { display: grid; grid-template-columns: max-content 1fr; gap: 3px 16px; }
   #tooltip .tt-grid .lbl { color: var(--text-dim); }
   #tooltip .tt-grid .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
@@ -777,43 +786,52 @@ function showBarTooltip(e, day, metric) {
 
   // Tokens / Luna / Electricity metrics: split each model's total into
   // cached / input / output (or input / output time for electricity)
-  if (current.detail && (metric === "tokens" || metric === "luna" || metric === "electric")) {
-    const money = metric === "luna" || metric === "electric";
+  if (current.detail && (metric === "luna" || metric === "electric")) {
     const e = metric === "electric";
+    const s = curSym(metric);
     const d = current.detail[day] || {};
+    // one shared grid per metric (d2 = in/out, d3 = cached/in/out) so
+    // columns line up across models
+    html += '<div class="tt-detail ' + (e ? "d2" : "d3") + '">';
     for (const m of sorted) {
       const c = d[m] || { c: 0, i: 0, o: 0, p: 0, o: 0 };
-      html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
-        m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
-        (e
-          // electricity: label left, time+cost right (grid like the per-model tooltip)
-          ? '<div class="tt-grid">' +
-            '<span class="lbl">input</span><span class="val">' + fmtHms(c.p) + ' · €' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
-            '<span class="lbl">output</span><span class="val">' + fmtHms(c.o) + ' · €' + ((c.o * PWR.gen) / 3.6e9 * PWR.price).toFixed(4) + '</span>' +
-            '</div>'
-          : '<div class="tt-detail">' +
-            (money
-              ? '<span class="tt-cell">cached ' + curSym(metric) + (c.c * LUNA.cached / MTOK).toFixed(4) + '</span>' +
-                '<span class="tt-cell">input ' + curSym(metric) + (c.i * LUNA.input / MTOK).toFixed(4) + '</span>' +
-                '<span class="tt-cell">output ' + curSym(metric) + (c.o * LUNA.output / MTOK).toFixed(4) + '</span>'
-              : '<span class="tt-cell">cached ' + fmt(c.c) + '</span>' +
-                '<span class="tt-cell">input ' + fmt(c.i) + '</span>' +
-                '<span class="tt-cell">output ' + fmt(c.o) + '</span>') +
-            '</div>');
+      html += '<div class="tt-name"><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
+        m + '<span class="tt-model-total">' + fmtValue(metric, modelTotals[m]) + '</span></div>';
+      if (e) {
+        html += '<span class="tt-cell"><span class="lbl">in</span><span class="num">' + fmtHms(c.p) + ' · €' + ((c.p * PWR.pref) / 3.6e9 * PWR.price).toFixed(4) + '</span></span>' +
+          '<span class="tt-cell"><span class="lbl">out</span><span class="num">' + fmtHms(c.o) + ' · €' + ((c.o * PWR.gen) / 3.6e9 * PWR.price).toFixed(4) + '</span></span>';
+      } else {
+        html += '<span class="tt-cell"><span class="lbl">cached</span><span class="num">' + s + (c.c * LUNA.cached / MTOK).toFixed(4) + '</span></span>' +
+          '<span class="tt-cell"><span class="lbl">in</span><span class="num">' + s + (c.i * LUNA.input / MTOK).toFixed(4) + '</span></span>' +
+          '<span class="tt-cell"><span class="lbl">out</span><span class="num">' + s + (c.o * LUNA.output / MTOK).toFixed(4) + '</span></span>';
+      }
     }
-  } else if (current.detail && metric === "time") {
-    // Time metric: per-model input / output / output-% breakdown
+    html += '</div>';
+  } else if (current.detail && metric === "tokens") {
+    // Tokens: shared cached / in / out grid so columns align across models
     const d = current.detail[day] || {};
+    html += '<div class="tt-detail d3">';
+    for (const m of sorted) {
+      const c = d[m] || { c: 0, i: 0, o: 0, p: 0, o: 0 };
+      html += '<div class="tt-name"><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
+        m + '<span class="tt-model-total">' + fmtValue(metric, modelTotals[m]) + '</span></div>';
+      html += '<span class="tt-cell"><span class="lbl">cached</span><span class="num">' + fmt(c.c) + '</span></span>' +
+        '<span class="tt-cell"><span class="lbl">in</span><span class="num">' + fmt(c.i) + '</span></span>' +
+        '<span class="tt-cell"><span class="lbl">out</span><span class="num">' + fmt(c.o) + '</span></span>';
+    }
+    html += '</div>';
+  } else if (current.detail && metric === "time") {
+    // Time: per-model in / out (with share %) breakdown, shared grid
+    const d = current.detail[day] || {};
+    html += '<div class="tt-detail d2">';
     for (const m of sorted) {
       const c = d[m] || { p: 0, o: 0 };
-      html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
-        m + '</span><span>' + fmtValue(metric, modelTotals[m]) + '</span></div>' +
-        '<div class="tt-detail">' +
-        '<span class="tt-cell">input ' + fmtHms(c.p) + '</span>' +
-        '<span class="tt-cell">output ' + fmtHms(c.o) + '</span>' +
-        '<span class="tt-cell">output ' + ((c.p + c.o) ? (c.o / (c.p + c.o) * 100).toFixed(1) : "0.0") + '%</span>' +
-        '</div>';
+      html += '<div class="tt-name"><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
+        m + '<span class="tt-model-total">' + fmtValue(metric, modelTotals[m]) + '</span></div>';
+      html += '<span class="tt-cell"><span class="lbl">in</span><span class="num">' + fmtHms(c.p) + '</span></span>' +
+        '<span class="tt-cell"><span class="lbl">out</span><span class="num">' + fmtHms(c.o) + ' · ' + ((c.p + c.o) ? (c.o / (c.p + c.o) * 100).toFixed(1) : "0.0") + '%</span></span>';
     }
+    html += '</div>';
   } else {
     for (const m of sorted) {
       html += '<div class="tt-row"><span><span class="tt-dot" style="background:' + modelColor[m] + '"></span>' +
