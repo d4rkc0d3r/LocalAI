@@ -20,4 +20,4 @@ Task:
   be sure it is directly relevant to my exact setup - lower their confidence accordingly
   (e.g. put them in a separate "relevant by title only, no commit message" group).
 - Format any PR numbers like #25635 as clickable links to their pull request, e.g. [#25635](https://github.com/ggml-org/llama.cpp/pull/25635).
-- Ignore changes for backends, models or features I do not use (Metal, SYCL, OpenCL, Hexagon, WebGPU, CI, NVFP4, ...).
+- Ignore changes for backends, models or features I do not use (Metal, SYCL, OpenCL, Hexagon, WebGPU, CI, NVFP4, version bump, ...).
