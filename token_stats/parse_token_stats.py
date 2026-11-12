@@ -4,7 +4,10 @@ Parses a llama.cpp server log (router mode) and appends per-request token stats
 to a Markdown table file.
 
 For each request it records:
-  - model                 : from "proxying request to model <name> on port <port>"
+  - model                 : from "spawning server instance with name=<name> on port <port>"
+                            (the "[<port>]" prefix on child log lines selects the
+                             entry; falls back to the trace-level "proxying request
+                             to model <name> on port <port>" line when present)
   - cached_input_tokens   : "N cached" from the prompt eval line
   - input_tokens          : processed prompt tokens from the prompt eval line
   - output_tokens         : generated tokens from the eval line
@@ -33,6 +36,16 @@ import sys
 
 # --- regexes ---------------------------------------------------------------
 
+# "0.01.479.186 I srv   load: spawning server instance with name=Gemma4-12B on port 50767"
+# router line at INFO level, emitted when a child server is spawned/reloaded.
+# groups: 1=model name  2=child port
+RE_SPAWN = re.compile(r"spawning server instance with name=(\S+) on port (\d+)")
+
+# leading "[PORT] " prefix on child server lines:
+# "[50767] 0.18.078.061 I slot print_timing: ..."
+RE_PORT = re.compile(r"^\[(\d+)\]")
+
+# fallback model anchor, only emitted at trace verbosity (--lv 4):
 # "0.32.312.339 I srv  proxy_reques: proxying request to model Qwen3.8-27B-medium on port 56613"
 RE_MODEL = re.compile(r"proxying request to model (\S+) on port (\d+)")
 
@@ -138,44 +151,83 @@ HEADER = [
 
 
 def parse(log_path):
-    """Yield one dict per completed request found in the log."""
-    current_model = None
-    pending_prompt = None  # (prompt_eval_ms, input_tokens, prompt_tps, cached)
-    current_offset = 0.0  # router timestamp (seconds) captured from the proxy line
+    """Yield one dict per completed request found in the log.
+
+    Model attribution: the router logs "spawning server instance with name=<X>
+    on port <P>" (INFO level) whenever a child server is (re)loaded, and every
+    child log line is prefixed with "[P] ". We keep a port -> model map from the
+    spawn lines and look up the model from the prefix on the timing lines.
+    The trace-level "proxying request to model" line (only present with
+    --lv 4) is kept as a gap-filler/fallback.
+    Timestamps: child clocks restart at each spawn, so the child timestamp is
+    offset by the router timestamp captured on the spawn line.
+    """
+    port_model = {}   # child port (str) -> model name, from spawn lines
+    port_offset = {}  # child port (str) -> router timestamp (s) of the spawn line
+    pending_prompt = None  # (prompt_eval_ms, input_tokens, prompt_tps, cached, child_ts)
+    pending_port = None    # port prefix (str) of the pending prompt line
+    current_model = None   # fallback model name from a trace-level proxy line
+    current_offset = 0.0   # fallback router timestamp (s) from a trace-level proxy line
 
     # base datetime = file creation time (st_birthtime is creation time on Windows)
     base_dt = datetime.datetime.fromtimestamp(os.stat(log_path).st_birthtime)
 
     with open(log_path, "r", encoding="utf-8-sig", errors="replace") as f:
         for line in f:
+            m = RE_SPAWN.search(line)
+            if m:
+                # (re)load: record which model name this child port serves.
+                # all timing lines of this instance carry the "[<port>]" prefix.
+                # if the model is reloaded on a new port, drop the old port of
+                # the same name (its child is dead, so its lines are already done)
+                model, port = m.group(1), m.group(2)
+                port_model[port] = model
+                for p in [p for p, n in port_model.items() if n == model and p != port]:
+                    del port_model[p]
+                    port_offset.pop(p, None)
+                m_ts = RE_TS.match(line)
+                port_offset[port] = ts_to_seconds(m_ts) if m_ts else 0.0
+                continue
+
             m = RE_MODEL.search(line)
             if m:
-                # a new request is starting; drop any stale pending state
+                # trace-level per-request line (only present with --lv 4); names the
+                # model/port directly. fill gaps in the spawn map and keep its router
+                # timestamp as a fallback anchor
+                port_model.setdefault(m.group(2), m.group(1))
                 current_model = m.group(1)
-                pending_prompt = None
-                # anchor the offset to the router (proxy) timestamp, not the
-                # child-server timestamp which can reset on model switches
                 m_ts = RE_TS.match(line)
                 current_offset = ts_to_seconds(m_ts) if m_ts else 0.0
                 continue
 
             m = RE_PROMPT.search(line)
             if m:
+                m_ts = RE_TS.match(line)
+                pending_port = RE_PORT.match(line)
                 pending_prompt = (
                     m.group(1),  # prompt_eval_time_ms
                     m.group(2),  # input_tokens
                     m.group(3),  # prompt_tokens_per_second
                     m.group(4),  # cached_input_tokens
+                    ts_to_seconds(m_ts) if m_ts else 0.0,  # child clock time of the line
                 )
                 continue
 
             m = RE_EVAL.search(line)
             if m and pending_prompt is not None:
-                prompt_eval_ms, input_tokens, prompt_tps, cached = pending_prompt
-                offset = current_offset
+                prompt_eval_ms, input_tokens, prompt_tps, cached, child_ts = pending_prompt
+                # resolve model + router timestamp for this request: port prefix
+                # -> spawn map (primary), trace-level proxy line (fallback)
+                port = pending_port.group(1) if pending_port else None
+                if port is not None and port in port_model:
+                    model = port_model[port]
+                    offset = port_offset.get(port, 0.0) + child_ts
+                else:
+                    model = current_model if current_model is not None else ""
+                    offset = current_offset
                 req_dt = base_dt + datetime.timedelta(seconds=offset)
                 yield {
-                    "model": current_model if current_model is not None else "",
+                    "model": model,
                     "cached_input_tokens": cached,
                     "input_tokens": input_tokens,
                     "output_tokens": m.group(2),
@@ -186,6 +238,7 @@ def parse(log_path):
                     "datetime": req_dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
                 }
                 pending_prompt = None
+                pending_port = None
 
 
 def main():

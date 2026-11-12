@@ -13,8 +13,9 @@ Steps:
   3. Stop the test server.
   4. Run parse_token_stats.py over the test log, producing
      token_stats/test_parsed_stats.md.
-  5. Verify that exactly two requests were parsed and that the second
-     request reported cached input tokens (> 0).
+  5. Verify that exactly two requests were parsed, that each row carries
+     the model name (Gemma4-12B), and that the second request reported
+     cached input tokens (> 0).
   6. If every check passed, delete the generated markdown, the test log, and
      the server output capture; otherwise keep them for manual inspection.
 
@@ -64,7 +65,7 @@ def main():
 
     results = {"q1_correct": False, "q2_correct": False,
                "request_count_ok": False, "second_cached_ok": False,
-               "throughput_ok": False}
+               "throughput_ok": False, "model_name_ok": False}
     resp1 = resp2 = ""
     server = None
     out_file = None
@@ -145,6 +146,12 @@ def main():
         results["request_count_ok"] = (len(rows) == 2)
         report("parsed request count", f"{len(rows)} row(s)", "2 rows",
                results["request_count_ok"])
+
+        # every row should carry the model name it was proxied to
+        # ("Model" is the 1st column)
+        results["model_name_ok"] = bool(rows) and all(r[0] == MODEL for r in rows)
+        got_models = sorted({r[0] for r in rows}) if rows else []
+        report("parsed model name", str(got_models), MODEL, results["model_name_ok"])
 
         if len(rows) >= 2:
             try:
