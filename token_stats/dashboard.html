@@ -296,6 +296,7 @@
     <select id="rangeSel">
       <option value="7">Last 7 Days</option>
       <option value="30" selected>Last 30 Days</option>
+      <option value="90">Last 90 Days</option>
       <option value="365">Last Year</option>
       <option value="all">Total</option>
     </select>
@@ -537,6 +538,7 @@ function buildAxisLabels(keys) {
   }
   const range = document.getElementById("rangeSel").value;
   if (range === "365") return monthMidLabels(keys);
+  if (range === "90") { for (const k of keys) if (+k.slice(8) % 7 === 0) out[k] = shortDay(k); return out; }
   if (range === "30") { for (const k of keys) if (+k.slice(8) % 3 === 0) out[k] = shortDay(k); return out; }
   for (const k of keys) out[k] = shortDay(k);
   return out;
@@ -1324,7 +1326,7 @@ document.getElementById("rangeSel").addEventListener("change", () => {
 });
 
 wireTooltip(document.getElementById("rangeSel"), "Range",
-  "Last 7 Days / Last 30 Days / Last Year: calendar days ending today.<br>" +
+  "Last 7 Days / Last 30 Days / Last 90 Days / Last Year: calendar days ending today.<br>" +
   "Total: everything in the data file.<br>" +
   '<span style="color:var(--text-dim)">Aggregation is suggested automatically for some ranges; you can switch back at any time.</span>');
 
