@@ -927,11 +927,13 @@ function render() {
 
     models = records.map(r => r.model);
     const uniq = [...new Set(models)];
-  models = uniq;
   modelColor = {};
   uniq.forEach((m, i) => modelColor[m] = colorFor(i));
 
   const recs = filterByRange(range);
+  // only models with at least one request in the selected range (colors stay
+  // stable across ranges — they are assigned from the full dataset above)
+  models = uniq.filter(m => recs.some(r => r.model === m));
   const bucketList = bucketListForRange(range);
 
   // speed group: aggregate over all models, or the selected model
