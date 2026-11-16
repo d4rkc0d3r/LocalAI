@@ -726,7 +726,7 @@ function renderChart(agg, metric) {
     yAxis.appendChild(el);
   }
 
-  // faint gridlines at each tick height (skip the bottom line — it sits on the axis border)
+  // faint grid lines at each tick height (skip the bottom line — it sits on the axis border)
   let grid = region.querySelector(".grid-lines");
   if (!grid) { grid = document.createElement("div"); grid.className = "grid-lines"; region.insertBefore(grid, bars); }
   grid.innerHTML = "";
