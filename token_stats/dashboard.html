@@ -328,7 +328,7 @@
     </div>
   </div>
   <div class="control-group">
-    <button type="button" id="groupBtn" class="toggle-btn" title="Pool model variants (-xhigh, -high, -medium, -low, -vision) that share a base name into one entry">Group variants</button>
+    <button type="button" id="groupBtn" class="toggle-btn">Group variants</button>
   </div>
   <div class="control-group">
     <select id="speedModelSel"></select>
@@ -411,7 +411,7 @@ let selectedModel = null;
 // "X-xhigh" + "X-high" + "X-medium" + "X-low" + "X-vision" -> "X").
 // Off = raw names, one entry per variant.
 let groupModels = false;
-const GROUP_SUFFIX_RE = /-(xhigh|high|medium|low|vision)$/;
+const GROUP_SUFFIX_RE = /-(xhigh|high|medium|low|vision|fast)$/;
 function modelKey(name) { return GROUP_SUFFIX_RE.test(name) ? name.replace(GROUP_SUFFIX_RE, "") : name; }
 
 function metricLabel(m) {
@@ -1385,9 +1385,13 @@ document.getElementById("speedModelSel").addEventListener("change", e => {
   render();
 });
 
-document.getElementById("groupBtn").addEventListener("click", e => {
+const groupBtn = document.getElementById("groupBtn");
+wireTooltip(groupBtn, "Group variants",
+  "Pool model variants (-xhigh, -high, -medium, -low, -vision, -fast) that share a base name into one entry.<br>" +
+  '<span style="color:var(--text-dim)">Off = raw names, one entry per variant.</span>');
+groupBtn.addEventListener("click", () => {
   groupModels = !groupModels;
-  e.currentTarget.classList.toggle("active", groupModels);
+  groupBtn.classList.toggle("active", groupModels);
   render();
 });
 
