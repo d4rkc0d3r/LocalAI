@@ -7,7 +7,6 @@ llama.cpp-CUDA\llama-server.exe ^
   --timeout 600 ^
   --models-max 1 ^
   --parallel 1 ^
-  --load-mode dio ^
   --log-colors off ^
   --log-file token_stats/raw_server.log
 
