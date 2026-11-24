@@ -156,6 +156,21 @@ testing vram savings from https://github.com/ggml-org/llama.cpp/pull/31669
 | Qwen3.8-27B-fast   | 20.50 GiB | 19.61 GiB |
 | Qwen3.8-27B-vision | 20.40 GiB | 20.00 GiB |
 
+Tested inkling 2 mini:
+- pp 800 tg 50 (ub64) still very slow needs lots of optimizations.
+- no dspark support merged yet either.
+- lots of vram usage based on ubatch size.
+- mmproj somehow took 10+ GiB, supposed to be like 0.6
+- power draw was only 120W during tg, lol.
+- very basic usage looked fine quality wise.
+
+| ctx | ub | kv | mmproj | vram |
+| --- | --- | --- | --- | --- |
+| 131072 | 64  | q8_0 | false | 17.13 GiB |
+| 131072 | 64  | f16  | false | 19.14 GiB |
+| 131072 | 128 | q8_0 | false | 18.73 GiB |
+| 131072 | 64  | q8_0 | true  | 28.46 GiB |
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
