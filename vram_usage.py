@@ -17,7 +17,9 @@ PowerShell counter ("dedicated usage" + "shared usage").
 When all models have been measured the server is shut down.
 
 Usage:
-    python vram_usage.py
+    python vram_usage.py            # default Qwen3.8 list
+    python vram_usage.py <filter>   # query /v1/models and keep only names
+                                    # containing <filter> (case-insensitive)
 """
 import json
 import os
@@ -29,7 +31,7 @@ import urllib.request
 
 # --- configuration ----------------------------------------------------------
 
-# models to measure, as defined in models.ini
+# default models to measure, as defined in models.ini
 MODELS = [
     "Qwen3.8-27B-medium",
     "Qwen3.8-27B-fast",
@@ -181,6 +183,41 @@ def kill_server(proc, out_file=None):
 
 # --- main --------------------------------------------------------------------
 
+def fetch_models(base, timeout=START_TIMEOUT):
+    """Query the server's /v1/models endpoint and return the list of model
+    names (router mode)."""
+    with urllib.request.urlopen(base + "/v1/models", timeout=timeout) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    return [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+
+
+def resolve_models(root, log_path, filter_text):
+    """Return the list of models to measure.
+
+    With no filter, use the hardcoded default MODELS list. With a filter, start
+    a server, read /v1/models, keep only names containing the filter
+    (case-insensitive), then shut the server down."""
+    if not filter_text:
+        return list(MODELS)
+
+    proc = None
+    out_file = None
+    try:
+        proc, out_file = start_server(root, log_path)
+        if not wait_for_server(BASE, timeout=START_TIMEOUT):
+            print(f"[vram] ERROR: server did not start in time (see {log_path})")
+            return []
+        try:
+            names = fetch_models(BASE)
+        except Exception as e:
+            print(f"[vram] ERROR: could not query /v1/models: {e}")
+            return []
+        needle = filter_text.lower()
+        return [n for n in names if needle in n.lower()]
+    finally:
+        kill_server(proc, out_file)
+
+
 def preflight_check():
     """Abort if the live server (LaunchServer.bat, port 8000) is already up,
     since its loaded model would pollute the VRAM measurements."""
@@ -200,8 +237,16 @@ def main():
     log_path = os.path.join(root, LOG_DIR, LOG_NAME)
     os.makedirs(os.path.join(root, LOG_DIR), exist_ok=True)
 
+    filter_text = " ".join(sys.argv[1:]).strip() if len(sys.argv) > 1 else ""
+
     if not preflight_check():
         return 1
+
+    models = resolve_models(root, log_path, filter_text)
+    if not models:
+        print("[vram] No models selected (check the filter)")
+        return 1
+    print(f"[vram] measuring {len(models)} model(s): {', '.join(models)}")
 
     proc = None
     out_file = None
@@ -210,7 +255,7 @@ def main():
     request_times = []
 
     try:
-        for model in MODELS:
+        for model in models:
             # 1) baseline before loading this model
             try:
                 before = ps_vram_total()
