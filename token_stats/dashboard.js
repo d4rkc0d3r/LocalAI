@@ -369,13 +369,17 @@ function aggregateByModel(recs, metric) {
   if (isSpeed(metric)) {
     const acc = {};
     for (const r of recs) {
-      const cell = acc[r.model] || (acc[r.model] = { tok: 0, ms: 0, cc: 0, ct: 0, os: 0, tms: 0 });
+      const cell = acc[r.model] || (acc[r.model] = { tok: 0, ms: 0, cc: 0, ct: 0, os: 0, tms: 0, ptok: 0, pms: 0, otok: 0, oms: 0 });
       cell.tok += speedTokens(r, metric);
       cell.ms  += speedMs(r, metric);
       cell.cc  += r.cached;
       cell.ct  += r.cached + r.input;
       cell.os  += r.outputMs;
       cell.tms += r.promptMs + r.outputMs;
+      cell.ptok += r.input;
+      cell.pms  += r.promptMs;
+      cell.otok += r.output;
+      cell.oms  += r.outputMs;
     }
     const perModel = {};
     for (const m in acc) {
@@ -384,7 +388,27 @@ function aggregateByModel(recs, metric) {
                    : metric === "ot"    ? (c.tms ? c.os / c.tms * 100 : 0)
                    :                       (c.ms  ? c.tok / c.ms * 1000 : 0);
     }
-    return { perModel, detail: {} };
+    // per-model token/time detail for the tps modes (tokens + time + tps in the tooltip)
+    const detail = {};
+    if (metric === "prompt" || metric === "output") {
+      for (const m in acc) {
+        const c = acc[m];
+        detail[m] = metric === "prompt"
+          ? { tok: c.ptok, ms: c.pms }
+          : { tok: c.otok, ms: c.oms };
+      }
+    } else if (metric === "cache") {
+      for (const m in acc) {
+        const c = acc[m];
+        detail[m] = { cc: c.cc, ct: c.ct };
+      }
+    } else if (metric === "ot") {
+      for (const m in acc) {
+        const c = acc[m];
+        detail[m] = { p: c.pms, o: c.oms };
+      }
+    }
+    return { perModel, detail };
   }
 
   const perModel = {};
@@ -829,6 +853,27 @@ function renderChart(agg, metric) {
 // Builds the tt-grid breakdown HTML from a detail object
 // ({c,i,o} for tokens & luna, {p,o} for time & electric)
 function breakdownGrid(d, metric) {
+  if (metric === "prompt" || metric === "output") {
+    const c = d || { tok: 0, ms: 0 };
+    const tps = c.ms ? c.tok / c.ms * 1000 : 0;
+    return '<span class="lbl">tokens</span><span class="val">' + fmt(c.tok) + '</span>' +
+      '<span class="lbl">time</span><span class="val">' + fmtHms(c.ms) + '</span>' +
+      '<span class="lbl">tps</span><span class="val">' + tps.toFixed(1) + '</span>';
+  }
+  if (metric === "cache") {
+    const c = d || { cc: 0, ct: 0 };
+    const pct = c.ct ? c.cc / c.ct * 100 : 0;
+    return '<span class="lbl">input</span><span class="val">' + fmt(c.ct - c.cc) + '</span>' +
+      '<span class="lbl">cached</span><span class="val">' + fmt(c.cc) + '</span>' +
+      '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span>";
+  }
+  if (metric === "ot") {
+    const c = d || { p: 0, o: 0 };
+    const share = (c.p + c.o) ? c.o / (c.p + c.o) * 100 : 0;
+    return '<span class="lbl">input time</span><span class="val">' + fmtHms(c.p) + '</span>' +
+      '<span class="lbl">output time</span><span class="val">' + fmtHms(c.o) + '</span>' +
+      '<span class="lbl">output share</span><span class="val">' + share.toFixed(1) + "%</span>";
+  }
   if (metric === "time" || metric === "electric") {
     const c = d || { p: 0, o: 0 };
     if (metric === "time") {
@@ -892,7 +937,7 @@ function renderSummary(perModel, detail, metric, speedTotal) {
 
   // cached / input / output breakdown on hover for tokens & luna & electric;
   // input / output / output-% for time
-  const showBreakdown = !!(detail && (metric === "tokens" || metric === "luna" || metric === "electric" || metric === "time"));
+  const showBreakdown = !!(detail && (metric === "tokens" || metric === "luna" || metric === "electric" || metric === "time" || metric === "prompt" || metric === "output" || metric === "cache" || metric === "ot"));
   // same breakdown on the Total row, summed across all models
   const sumDetail = showBreakdown ? {} : null;
   if (showBreakdown) for (const m in detail) for (const k in detail[m]) sumDetail[k] = (sumDetail[k] || 0) + detail[m][k];
