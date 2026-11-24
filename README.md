@@ -164,12 +164,15 @@ Tested inkling 2 mini:
 - power draw was only 120W during tg, lol.
 - very basic usage looked fine quality wise.
 
-| ctx | ub | kv | mmproj | vram |
-| --- | --- | --- | --- | --- |
-| 131072 | 64  | q8_0 | false | 17.13 GiB |
-| 131072 | 64  | f16  | false | 19.14 GiB |
-| 131072 | 128 | q8_0 | false | 18.73 GiB |
-| 131072 | 64  | q8_0 | true  | 28.46 GiB |
+| ctx | ub | kv | mmproj | dspark-3 | vram |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 131072 |  64 | q8_0 | false | false | 17.13 GiB |
+| 131072 |  64 | q8_0 | false | true  | 18.38 GiB |
+| 131072 |  64 | f16  | false | false | 19.14 GiB |
+| 131072 | 128 | q8_0 | false | false | 18.73 GiB |
+| 131072 |  64 | q8_0 | true  | false | 28.46 GiB |
+
+dspark support for inkling just got merged but seems bad. probabilistic sampling makes speed 2.5x slower than no dspark while greedy is only like ~20% slower than no spec decode. still though both are slower. also something is using cpu but I dont know what. turned of backend sampling for spec decoding. now its faster than no spec. however I still have 75% cpu usage, very high. this all sounds like dspark is just running on cpu, no cuda implementation yet?
 
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
