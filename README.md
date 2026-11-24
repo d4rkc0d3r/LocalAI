@@ -149,6 +149,13 @@ removed `no-mmproj-offload` vision offload to cpu. now models either have gpu vi
 
 patch log output in server-context.cpp to mention cached token count and add parser for log to extract per request stats into a simple table. then add html dashboard to visualize stats. also added automatic test added to build script to ensure parsing works correctly after new build.
 
+testing vram savings from https://github.com/ggml-org/llama.cpp/pull/31669  
+| Model | before | after |
+| :--- | ---: | ---: |
+| Qwen3.8-27B-medium | 19.95 GiB | 19.53 GiB |
+| Qwen3.8-27B-fast   | 20.50 GiB | 19.61 GiB |
+| Qwen3.8-27B-vision | 20.40 GiB | 20.00 GiB |
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
