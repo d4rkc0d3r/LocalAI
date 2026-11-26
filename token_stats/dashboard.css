@@ -237,7 +237,7 @@ select:focus { border-color: var(--accent); }
 #tooltip .tt-grid .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
 
 /* Summary list */
-.model-row { margin-bottom: 12px; cursor: pointer; border-left: 2px solid transparent; padding-left: 8px; transition: border-color .12s, background .12s; }
+.model-row { margin-bottom: 4px; cursor: pointer; border-left: 2px solid transparent; padding-left: 8px; padding-bottom: 4px; transition: border-color .12s, background .12s; }
 .model-row:last-child { margin-bottom: 0; }
 .model-row:hover { background: rgba(255,255,255,0.04); }
 .model-row.selected { border-left-color: var(--accent); background: rgba(79,140,255,0.10); }
@@ -245,9 +245,10 @@ select:focus { border-color: var(--accent); }
 .model-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
 .model-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.model-bar-track { height: 8px; background: var(--bg-inset); border-radius: 4px; overflow: hidden; }
+.model-bar-row { display: flex; align-items: center; gap: 8px; height: 8px; }
+.model-bar-track { flex: 1; height: 8px; background: var(--bg-inset); border-radius: 4px; overflow: hidden; }
 .model-bar-fill { height: 100%; border-radius: 4px; }
-.model-sub { font-size: 11px; color: var(--text-dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.model-pct { font-size: 10px; height: 8px; line-height: 8px; color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; flex-shrink: 0; }
 
 .grand-total {
   margin-top: 16px;
@@ -258,16 +259,6 @@ select:focus { border-color: var(--accent); }
   font-size: 13px;
 }
 .grand-total b { font-variant-numeric: tabular-nums; }
-
-.cache-line {
-  margin-top: 8px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  cursor: default;
-}
-.cache-line span { color: var(--text-dim); }
-.cache-line b { font-variant-numeric: tabular-nums; }
 
 /* styled tooltip for metric buttons */
 .tt-text { color: var(--text-dim); line-height: 1.5; max-width: 240px; }

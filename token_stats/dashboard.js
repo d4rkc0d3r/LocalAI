@@ -644,7 +644,6 @@ function render() {
   syncControls();
   renderChart(agg, metric);
   renderSummary(modelAgg.perModel, modelAgg.detail, metric, speedTotal);
-  renderCacheLine(recs);
 
   // restore raw model names for the next render
   records.forEach((r, i) => { r.model = origModels[i]; });
@@ -923,15 +922,16 @@ function renderSummary(perModel, detail, metric, speedTotal) {
     const v = perModel[m] || 0;
     const pct = total ? (v / total * 100).toFixed(1) : "0.0";
     const w = maxV ? (v / maxV * 100) : 0;
+    const pctLabel = isSpeed(metric) ? "" : '<span class="model-pct">' + pct + "%</span>";
     return '<div class="model-row" data-model="' + m + '">' +
       '<div class="model-row-head">' +
         '<span class="model-name">' + m + "</span>" +
         '<span class="model-value">' + fmtValue(metric, v) + "</span>" +
       "</div>" +
-      '<div class="model-bar-track"><div class="model-bar-fill" style="width:' + w + '%;background:' + modelColor[m] + '"></div></div>' +
-      (isSpeed(metric)
-        ? '<div class="model-sub">&nbsp;</div>'   // "…% of total" is meaningless for averages
-        : '<div class="model-sub">' + pct + "% of total</div>") +
+      '<div class="model-bar-row">' +
+        '<div class="model-bar-track"><div class="model-bar-fill" style="width:' + w + '%;background:' + modelColor[m] + '"></div></div>' +
+        pctLabel +
+      "</div>" +
     "</div>";
   }).join("") || '<div class="empty">No data in range</div>';
 
@@ -960,23 +960,6 @@ function renderSummary(perModel, detail, metric, speedTotal) {
       ? '<div class="tt-grid">' + breakdownGrid(sumDetail, metric) + '</div>'
       : "<span>" + fmtValue(metric, total) + "</span>");
   }
-}
-
-// Cache Hit % for the whole range (sum cached and cached+input first, then divide).
-// Only shown while the Tokens metric is active.
-function renderCacheLine(recs) {
-  const line = document.getElementById("cacheLine");
-  if (metric !== "tokens") { line.hidden = true; return; }
-  let c = 0, t = 0;
-  for (const r of recs) { c += r.cached; t += r.cached + r.input; }
-  if (!t) { line.hidden = true; return; }
-  const pct = c / t * 100;
-  line.hidden = false;
-  document.getElementById("cacheValue").textContent = pct.toFixed(1) + "%";
-  wireTooltip(line, "Cache Hit %", '<div class="tt-grid">' +
-    '<span class="lbl">input</span><span class="val">' + fmt(t - c) + '</span>' +
-    '<span class="lbl">cached</span><span class="val">' + fmt(c) + '</span>' +
-    '<span class="lbl">cache hit</span><span class="val">' + pct.toFixed(1) + "%</span></div>");
 }
 
 // Clicking a model row selects it for both charts; clicking the selected
