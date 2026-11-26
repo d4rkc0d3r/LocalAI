@@ -593,18 +593,26 @@ function render() {
   const recs = filterByRange(range);
   // only models with at least one request in the selected range (colors stay
   // stable across ranges — they are assigned from the full dataset above)
-  models = uniq.filter(m => recs.some(r => r.model === m));
+  // further drop models below the Min requests threshold
+  const minReq = Math.max(0, parseInt(document.getElementById("minReqSel").value, 10) || 0);
+  const reqCount = {};
+  for (const r of recs) reqCount[r.model] = (reqCount[r.model] || 0) + 1;
+  models = uniq.filter(m => (reqCount[m] || 0) >= minReq);
   const bucketList = bucketListForRange(range);
 
+  // filtered records: only in-range, above-threshold models — everything downstream
+  // (chart, per-model panel, totals) sees just these
+  const filtered = minReq ? recs.filter(r => (reqCount[r.model] || 0) >= minReq) : recs;
+
   // speed group: aggregate over all models, or the selected model
-  const speedRecs = selectedModel ? recs.filter(r => r.model === selectedModel) : recs;
+  const speedRecs = selectedModel ? filtered.filter(r => r.model === selectedModel) : filtered;
   let agg;
   if (speedActive) agg = aggregateSpeedByDay(speedRecs, metric, bucketList);
   // main group: with a model selected, rescale the chart to that model only
   else agg = aggregateByDay(
-    selectedModel ? recs.filter(r => r.model === selectedModel) : recs,
+    selectedModel ? filtered.filter(r => r.model === selectedModel) : filtered,
     metric, bucketList);
-  const modelAgg = aggregateByModel(recs, metric);   // always all models — the right panel is the selector
+  const modelAgg = aggregateByModel(filtered, metric);   // always all models — the right panel is the selector
 
   // speed group: the Total row must aggregate the raw entries (sum tokens /
   // sum ms, sum cached / sum input, …) — NOT sum the per-model averages
@@ -624,7 +632,8 @@ function render() {
                :                       (ms  ? tok / ms * 1000 : 0);
   }
 
-  // a stale selection (e.g. range shrank past the model's data) clears itself
+  // a stale selection (e.g. range shrank past the model's data or it fell below
+  // the min-requests threshold) clears itself
   if (selectedModel && !modelAgg.perModel[selectedModel]) selectedModel = null;
   syncModelSel();
 
@@ -632,13 +641,13 @@ function render() {
 
   // subtitle: plain first-to-last date of the in-range data
   let minDate = "", maxDate = "";  // full "YYYY-MM-DD HH:..." so HH:00 sorts below HH:30
-  for (const r of recs) {
+  for (const r of filtered) {
     if (!minDate || r.date < minDate) minDate = r.date;
     if (!maxDate || r.date > maxDate) maxDate = r.date;
   }
   document.getElementById("subtitle").textContent =
-    recs.length
-      ? shortDay(dayKey(minDate)) + " — " + shortDay(dayKey(maxDate)) + "  ·  " + fmt(recs.length) + " requests in range"
+    filtered.length
+      ? shortDay(dayKey(minDate)) + " — " + shortDay(dayKey(maxDate)) + "  ·  " + fmt(filtered.length) + " requests in range"
       : "no data in range";
 
   syncControls();
@@ -1056,5 +1065,11 @@ groupBtn.addEventListener("click", () => {
   groupBtn.classList.toggle("active", groupModels);
   render();
 });
+
+const minReqSel = document.getElementById("minReqSel");
+wireTooltip(minReqSel, "Min requests",
+  "Hide models with fewer than this many requests in the selected range.<br>" +
+  '<span style="color:var(--text-dim)">Applies to the chart, per-model panel and totals.</span>');
+minReqSel.addEventListener("input", () => render());
 
 loadData();

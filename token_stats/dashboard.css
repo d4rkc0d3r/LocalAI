@@ -46,6 +46,26 @@ select {
 }
 select:focus { border-color: var(--accent); }
 
+#minReqSel {
+  width: 64px;
+  background: var(--bg-inset);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 13px;
+  outline: none;
+  /* hide the up/down spinner controls */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+#minReqSel::-webkit-outer-spin-button,
+#minReqSel::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#minReqSel:focus { border-color: var(--accent); }
+
 .btn-group {
   display: flex;
   background: var(--bg-inset);
