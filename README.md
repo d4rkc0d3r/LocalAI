@@ -172,7 +172,11 @@ Tested inkling 2 mini:
 | 131072 | 128 | q8_0 | false | false | 18.73 GiB |
 | 131072 |  64 | q8_0 | true  | false | 28.46 GiB |
 
-dspark support for inkling just got merged but seems bad. probabilistic sampling makes speed 2.5x slower than no dspark while greedy is only like ~20% slower than no spec decode. still though both are slower. also something is using cpu but I dont know what. turned of backend sampling for spec decoding. now its faster than no spec. however I still have 75% cpu usage, very high. this all sounds like dspark is just running on cpu, no cuda implementation yet?
+dspark support for inkling just got merged but seems bad. probabilistic sampling makes speed 2.5x slower than no dspark while greedy is only like ~20% slower than no spec decode. still though both are slower. also something is using cpu but I dont know what. turned of backend sampling for spec decoding. now its faster than no spec. however I still have 75% cpu usage, very high. this all sounds like dspark is just running on cpu, no cuda implementation yet?  
+tried dflash2 for inkling also has weird high cpu usage but even with greedy and no backend sampling slower than no draft.
+
+bumped up kv cache quant on qwen3.8. medium is now 88 (was 85) while fast dflash2 variant is 85 (was 55). this bumped up vram usage to 20.15GiB & 20.24GiB respectively.  
+still waiting on those native q8_0 in flash attention prs to get merged
 
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
