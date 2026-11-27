@@ -178,6 +178,8 @@ tried dflash2 for inkling also has weird high cpu usage but even with greedy and
 bumped up kv cache quant on qwen3.8. medium is now 88 (was 85) while fast dflash2 variant is 85 (was 55). this bumped up vram usage to 20.15GiB & 20.24GiB respectively.  
 still waiting on those native q8_0 in flash attention prs to get merged
 
+inkling compute buffer fix got merged. dspark ubatch 64 entry is now 17.28 GiB. with default ubatch of 512 its still quite chonky at 18.91 GiB so using 256 for now
+
 ### KV Cache Quant
 * https://www.reddit.com/r/LocalLLaMA/comments/1mhlj69/whats_the_verdict_on_using_quantized_kv_cache/n71q12e/
 * https://www.reddit.com/r/LocalLLaMA/comments/1tp9d1w/kv_cache_quant_benchmarks_q5_q6_are_underrated/
